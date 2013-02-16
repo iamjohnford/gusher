@@ -15,6 +15,7 @@ AC_PROG_CC
 AC_CHECK_LIB([pthread], [pthread_cancel])
 AC_CHECK_LIB([microhttpd], [MHD_start_daemon])
 AC_CHECK_LIB([guile], [scm_boot_guile])
+AC_CHECK_LIB([pq], [PQconnectdb])
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])

@@ -24,6 +24,9 @@
 /* Define to 1 if you have the `microhttpd' library (-lmicrohttpd). */
 #undef HAVE_LIBMICROHTTPD
 
+/* Define to 1 if you have the `pq' library (-lpq). */
+#undef HAVE_LIBPQ
+
 /* Define to 1 if you have the `pthread' library (-lpthread). */
 #undef HAVE_LIBPTHREAD
 
