@@ -1,6 +1,9 @@
 #include <microhttpd.h>
 #include <libguile.h>
+#include <errno.h>
 #include <stdio.h>
+#include <sys/signal.h>
+#include <unistd.h>
 #include <string.h>
 #include <ctype.h>
 
@@ -18,7 +21,7 @@ inline SCM string_pair(const char *key, const char *value) {
 static int fill_table(void *cls, enum MHD_ValueKind kind,
 			const char *key, const char *value) {
 	SCM *alist;
-	static char buf[2048];
+	char buf[2048];
 	int i, n;
 	alist = (SCM *)cls;
 	if (value == NULL) value = "";
@@ -94,34 +97,49 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 	return MHD_YES;
 	}
 
-static SCM sayfoo(void) {
-	printf("foo!\n");
-	return SCM_UNSPECIFIED;
-	}
-
 static void guile_shell(void *closure, int argc, char **argv) {
 	fprintf(stderr, "guile starting\n");
-	scm_c_define_gsubr("foo", 0, 0, 0, sayfoo);
 	scm_shell(argc, argv);
 	}
 
 int main(int argc, char **argv) {
 	struct MHD_Daemon *daemon;
-	int port;
-	port = DEFAULT_PORT;
+	int http_port, opt;
+	int background;
+	http_port = DEFAULT_PORT;
+	background = 0;
+	while ((opt = getopt(argc, argv, "dp:")) != -1) {
+		switch (opt) {
+			case 'p':
+				http_port = atoi(optarg);
+				break;
+			case 'd':
+				background = 1;
+				break;
+			default:
+				fprintf(stderr, "invalid option: %c", opt);
+				exit(1);
+			}
+		}
+	if (background) {
+		signal(SIGCHLD, SIG_IGN);
+		if (fork() > 0) _exit(0);
+		}
 	daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY,
-			port,
+			http_port,
 			NULL,
 			NULL,
 			&http_callback,
 			NULL,
 			MHD_OPTION_END);
 	if (daemon == NULL) {
-		fprintf(stderr, "can't start daemon, bye.\n");
+		fprintf(stderr, "can't start daemon: %s.\n", strerror(errno));
 		return 1;
 		}
-	//getchar();
-	scm_boot_guile(argc, argv, guile_shell, 0);
+	if (background) {
+		while (1) sleep(1);
+		}
+	else scm_boot_guile(argc, argv, guile_shell, 0);
 	MHD_stop_daemon(daemon);
 	return 0;
 	}
