@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
+#include "postgres.h"
 
 #define DEFAULT_PORT 8080
 #define scm_sym(a) (scm_from_locale_symbol(a))
@@ -76,6 +77,7 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 			sizeof(struct MHD_Connection *));
 		scm_c_eval_string("(define http-handlers (make-hash-table))");
 		scm_c_define_gsubr("reply-http", 4, 0, 0, reply_http);
+		init_postgres();
 		scm_c_primitive_load("boot.scm");
 		dispatch = scm_c_eval_string("default-handler");
 		}
@@ -99,6 +101,7 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 
 static void guile_shell(void *closure, int argc, char **argv) {
 	fprintf(stderr, "guile starting\n");
+	init_postgres();
 	scm_shell(argc, argv);
 	}
 
