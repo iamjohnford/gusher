@@ -19,13 +19,13 @@ struct mhd_conn {
 
 static int init_http_guile = 1;
 static scm_t_bits mhd_conn_tag;
-static SCM dispatch;
+static SCM not_found;
 
 inline SCM string_pair(const char *key, const char *value) {
 	return scm_cons(scm_sym(key), scm_from_locale_string(value));
 	}
 
-static const char *query = "GET / HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
+/*static const char *query = "GET / HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
 
 static void prime_pump(int port) {
 	int sock, n, len, sent;
@@ -51,6 +51,7 @@ static void prime_pump(int port) {
 	free(remote);
 	return;
 	}
+*/
 
 static int fill_table(void *cls, enum MHD_ValueKind kind,
 			const char *key, const char *value) {
@@ -102,11 +103,42 @@ static SCM reply_http(SCM conn_smob, SCM args) {
 	return scm_from_signed_integer(ret);
 	}
 
+static SCM intern_not_found(SCM conn) {
+	SCM args, headers;
+	args = SCM_EOL;
+	args = scm_cons(scm_from_locale_string("Not Found"), args);
+	headers = SCM_EOL;
+	headers = scm_cons(scm_cons(scm_from_locale_string("content-type"),
+				scm_from_locale_string("text/plain")),
+				headers);
+	args = scm_cons(headers, args);
+	args = scm_cons(scm_from_signed_integer(404), args);
+	return reply_http(conn, args);
+	}
+
+static SCM find_handler(const char *url) {
+	SCM node, pair;
+	char *path;
+	node = scm_c_eval_string("req-handlers");
+	while (node != SCM_EOL) {
+		pair = SCM_CAR(node);
+		path = scm_to_locale_string(SCM_CAR(pair));
+		if (strncmp(path, url, strlen(path)) == 0) {
+			free(path);
+			return SCM_CDR(pair);
+			}
+		free(path);
+		node = SCM_CDR(node);
+		}
+	return SCM_BOOL_F;
+	}
+
 static int http_callback(void *cls, struct MHD_Connection *conn,
 			const char *url, const char *method,
 			const char *version, const char *upload_data,
 			size_t *upload_data_size, void **con_cls) {
 	SCM headers, query, cookies, conn_smob;
+	SCM handler;
 	int kind;
 	struct mhd_conn *mconn;
 	if (init_http_guile) {
@@ -115,14 +147,20 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 		mhd_conn_tag = scm_make_smob_type("mhd_conn", 
 			sizeof(struct MHD_Connection *));
 		scm_c_define_gsubr("reply-http", 2, 0, 0, reply_http);
+		scm_c_define_gsubr("not-found", 1, 0, 0, intern_not_found);
+		scm_c_define("req-handlers", SCM_EOL);
 		init_postgres();
 		scm_c_primitive_load("boot.scm");
-		dispatch = scm_c_eval_string("dispatch");
+		not_found = scm_c_eval_string("not-found");
 		}
 	mconn = (struct mhd_conn *)scm_gc_malloc(sizeof(struct mhd_conn),
 					"mhd_conn");
 	mconn->conn = conn;
 	SCM_NEWSMOB(conn_smob, mhd_conn_tag, mconn);
+	if ((handler = find_handler(url)) == SCM_BOOL_F) {
+		scm_call_1(not_found, conn_smob);
+		return MHD_YES;
+		}
 	headers = SCM_EOL;
 	MHD_get_connection_values(conn, MHD_HEADER_KIND, fill_table,
 				(void *)&headers);
@@ -136,7 +174,7 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 	cookies = SCM_EOL;
 	MHD_get_connection_values(conn, MHD_COOKIE_KIND, fill_table,
 				(void *)&cookies);
-	scm_call_4(dispatch, conn_smob, headers, query, cookies);
+	reply_http(conn_smob, scm_call_3(handler, headers, query, cookies));
 	return MHD_YES;
 	}
 

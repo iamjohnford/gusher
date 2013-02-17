@@ -22,9 +22,13 @@ FOO!
 </html>
 ")
 
-(define http-handlers '())
-(define (register-handler uri handler)
-	(set! http-handlers (cons (cons uri handler) http-handlers))
+(define (set-handler path handler)
+	(set! req-handlers
+		(sort-list (cons (cons path handler) req-handlers)
+			(lambda (a b) (> (string-length (car a))
+					(string-length (car b))))
+			)
+		)
 	)
 (define (plain-text body)
 	(list 200 '(("content-type" . "text/plain")) body)
@@ -32,32 +36,18 @@ FOO!
 (define (send-html body)
 	(list 200 '(("content-type" . "text/html")) body)
 	)
-(register-handler "/"
+(set-handler "/index"
 	(lambda (headers query cookies)
 		(send-html html)
 		)
 	)
-(register-handler "/foo"
+(set-handler "/foo"
 	(lambda (headers query cookies)
 		(send-html foo)
 		)
 	)
-(define (find-handler uri handlers)
-	(cond 
-		((null? handlers) #f)
-		((equal? uri (caar handlers)) (cdar handlers))
-		(#t (find-handler uri (cdr handlers)))
-		)
-	)
-
-(define (dispatch conn headers query cookies)
-	(let* ( (uri (assq-ref headers 'uri))
-		(handler (find-handler uri http-handlers)) )
-		(if handler
-			(reply-http conn (handler headers query cookies))
-			(reply-http conn (list 404
-				'(("content-type" . "text/plain"))
-				"Not Found"))
-			)
+(set-handler "/foo/bar"
+	(lambda (headers query cookies)
+		(send-html "BAR!")
 		)
 	)
