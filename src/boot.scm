@@ -1,4 +1,5 @@
 (display "loading boot.scm\n")
+
 (define html "
 <html>
 <head>
@@ -10,17 +11,53 @@ I am Gusher!
 </html>
 ")
 
-(define (plain-text conn body)
-	(reply-http conn 200 '(("content-type" . "text/plain")) body)
+(define foo "
+<html>
+<head>
+<title>Gusher!</title>
+</head>
+<body>
+FOO!
+</body>
+</html>
+")
+
+(define http-handlers '())
+(define (register-handler uri handler)
+	(set! http-handlers (cons (cons uri handler) http-handlers))
 	)
-(define (send-html conn body)
-	(reply-http conn 200 '(("content-type" . "text/html")) body)
+(define (plain-text body)
+	(list 200 '(("content-type" . "text/plain")) body)
+	)
+(define (send-html body)
+	(list 200 '(("content-type" . "text/html")) body)
+	)
+(register-handler "/"
+	(lambda (headers query cookies)
+		(send-html html)
+		)
+	)
+(register-handler "/foo"
+	(lambda (headers query cookies)
+		(send-html foo)
+		)
+	)
+(define (find-handler uri handlers)
+	(cond 
+		((null? handlers) #f)
+		((equal? uri (caar handlers)) (cdar handlers))
+		(#t (find-handler uri (cdr handlers)))
+		)
 	)
 
-(define (default-handler conn headers query cookies)
-	(let* (
-		(uri (cdr (assq 'uri headers)))
-		)
-		(send-html conn html)
+(define (dispatch conn headers query cookies)
+	(let* ( (uri (assq-ref headers 'uri))
+		(handler (find-handler uri http-handlers)) )
+		(if handler
+			(reply-http conn (handler headers query cookies))
+			(reply-http conn (list 404
+				'(("content-type" . "text/plain"))
+				"Not Found"))
+			)
 		)
 	)
