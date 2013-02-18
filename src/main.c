@@ -17,12 +17,51 @@ struct mhd_conn {
 	struct MHD_Connection *conn;
 	};
 
+struct handler_entry {
+	char *path;
+	SCM handler;
+	struct handler_entry *link;
+	};
+
 static int init_http_guile = 1;
 static scm_t_bits mhd_conn_tag;
 static SCM not_found;
+static struct handler_entry *handlers = NULL;
 
 inline SCM string_pair(const char *key, const char *value) {
 	return scm_cons(scm_sym(key), scm_from_locale_string(value));
+	}
+
+static int sorter(const void *a, const void *b) {
+	struct handler_entry **e1, **e2;
+	e1 = (struct handler_entry **)a;
+	e2 = (struct handler_entry **)b;
+	return (strlen((*e2)->path) - strlen((*e1)->path));
+	}
+
+static SCM set_handler(SCM path, SCM lambda) {
+	struct handler_entry *entry, *pt;
+	struct handler_entry **list;
+	int count, i;
+	entry = (struct handler_entry *)malloc(
+				sizeof(struct handler_entry));
+	entry->path = scm_to_locale_string(path);
+	entry->handler = lambda;
+	entry->link = handlers;
+	handlers = entry;
+	count = 0;
+	for (pt = handlers; pt != NULL; pt = pt->link) count++;
+	list = (struct handler_entry **)malloc(
+			sizeof(struct handler_entry *) * count);
+	for (i = 0, pt = handlers; pt != NULL; pt = pt->link, i++)
+		list[i] = pt;
+	qsort((void *)list, count, sizeof(struct handler_entry *), sorter);
+	handlers = list[0];
+	count--;
+	for (i = 0; i < count; i++) list[i]->link = list[i + 1];
+	list[count]->link = NULL;
+	free(list);
+	return SCM_UNSPECIFIED;
 	}
 
 /*static const char *query = "GET / HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
@@ -77,9 +116,11 @@ static SCM reply_http(SCM conn_smob, SCM args) {
 	struct MHD_Response *resp;
 	struct mhd_conn *conn;
 	SCM node, pair, headers;
-	int ret;
+	int ret, n;
 	int http_status;
 	char *content;
+	char hname[256];
+	char hval[256];
 	http_status = scm_to_int(SCM_CAR(args));
 	args = SCM_CDR(args);
 	headers = SCM_CAR(args);
@@ -91,10 +132,11 @@ static SCM reply_http(SCM conn_smob, SCM args) {
 	node = headers;
 	while (node != SCM_EOL) {
 		pair = SCM_CAR(node);
-		MHD_add_response_header(resp,
-			scm_to_locale_string(SCM_CAR(pair)),
-			scm_to_locale_string(SCM_CDR(pair))
-			);
+		n = scm_to_locale_stringbuf(SCM_CAR(pair), hname, 256);
+		hname[n] = '\0';
+		n = scm_to_locale_stringbuf(SCM_CDR(pair), hval, 256);
+		hval[n] = '\0';
+		MHD_add_response_header(resp, hname, hval);
 		node = SCM_CDR(node);
 		}
 	ret = MHD_queue_response(conn->conn, http_status, resp);
@@ -117,18 +159,10 @@ static SCM intern_not_found(SCM conn) {
 	}
 
 static SCM find_handler(const char *url) {
-	SCM node, pair;
-	char *path;
-	node = scm_c_eval_string("req-handlers");
-	while (node != SCM_EOL) {
-		pair = SCM_CAR(node);
-		path = scm_to_locale_string(SCM_CAR(pair));
-		if (strncmp(path, url, strlen(path)) == 0) {
-			free(path);
-			return SCM_CDR(pair);
-			}
-		free(path);
-		node = SCM_CDR(node);
+	struct handler_entry *pt;
+	for (pt = handlers; pt != NULL; pt = pt->link) {
+		if (strncmp(pt->path, url, strlen(pt->path)) == 0)
+			return pt->handler;
 		}
 	return SCM_BOOL_F;
 	}
@@ -146,6 +180,7 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 		scm_init_guile();
 		mhd_conn_tag = scm_make_smob_type("mhd_conn", 
 			sizeof(struct MHD_Connection *));
+		scm_c_define_gsubr("set-handler", 2, 0, 0, set_handler);
 		scm_c_define_gsubr("reply-http", 2, 0, 0, reply_http);
 		scm_c_define_gsubr("not-found", 1, 0, 0, intern_not_found);
 		scm_c_define("req-handlers", SCM_EOL);

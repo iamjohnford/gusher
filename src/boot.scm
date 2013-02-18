@@ -22,14 +22,6 @@ FOO!
 </html>
 ")
 
-(define (set-handler path handler)
-	(set! req-handlers
-		(sort-list (cons (cons path handler) req-handlers)
-			(lambda (a b) (> (string-length (car a))
-					(string-length (car b))))
-			)
-		)
-	)
 (define (plain-text body)
 	(list 200 '(("content-type" . "text/plain")) body)
 	)
