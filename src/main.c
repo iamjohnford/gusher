@@ -8,7 +8,9 @@
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
+
 #include "postgres.h"
+#include "gtime.h"
 
 #define DEFAULT_PORT 8080
 #define scm_sym(a) (scm_from_locale_symbol(a))
@@ -185,6 +187,7 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 		scm_c_define_gsubr("not-found", 1, 0, 0, intern_not_found);
 		scm_c_define("req-handlers", SCM_EOL);
 		init_postgres();
+		init_time();
 		scm_c_primitive_load("boot.scm");
 		not_found = scm_c_eval_string("not-found");
 		}
@@ -216,6 +219,7 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 static void guile_shell(void *closure, int argc, char **argv) {
 	fprintf(stderr, "guile starting\n");
 	init_postgres();
+	init_time();
 	//prime_pump(8080);
 fprintf(stderr, "start shell\n");
 	scm_shell(argc, argv);
