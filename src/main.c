@@ -188,6 +188,7 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 		scm_c_define("req-handlers", SCM_EOL);
 		init_postgres();
 		init_time();
+		init_redis();
 		scm_c_primitive_load("boot.scm");
 		not_found = scm_c_eval_string("not-found");
 		}
@@ -220,6 +221,7 @@ static void guile_shell(void *closure, int argc, char **argv) {
 	fprintf(stderr, "guile starting\n");
 	init_postgres();
 	init_time();
+	init_redis();
 	//prime_pump(8080);
 fprintf(stderr, "start shell\n");
 	scm_shell(argc, argv);
