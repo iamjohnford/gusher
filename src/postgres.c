@@ -1,5 +1,8 @@
 #include <libguile.h>
 #include <libpq-fe.h>
+#include <string.h>
+
+#include "gtime.h"
 
 struct pg_conn {
 	PGconn *conn;
@@ -72,14 +75,41 @@ static SCM pg_exec(SCM conn, SCM query) {
 	return res_smob;
 	}
 
+static SCM decode_timestamp(const char *string) {
+	const char *here;
+	int year, month, day, hour, min, sec;
+	here = string;
+	year = atoi(here);
+	here = index(here, '-') + 1;
+	month = atoi(here);
+	here = index(here, '-') + 1;
+	day = atoi(here);
+	if (index(here, ':') == NULL) hour = min = sec = 0;
+	else {
+		here = index(here, ' ') + 1;
+		hour = atoi(here);
+		here = index(here, ':') + 1;
+		min = atoi(here);
+		here = index(here, ':') + 1;
+		sec = (int)(atof(here) + 0.5);
+		}
+	return make_time_intern(year, month, day, hour, min, sec);
+	}
+
 static SCM pg_decode(char *string, int dtype) {
 	switch (dtype) {
 		case 701:
 		case 1700:
-		case 700: return scm_from_double(atof(string));
+		case 700:
+			return scm_from_double(atof(string));
 		case 20:
 		case 21:
-		case 23: return scm_from_signed_integer(atoi(string));
+		case 23:
+			return scm_from_signed_integer(atoi(string));
+		case 1114:
+		case 1184:
+		case 1082:
+			return decode_timestamp(string);
 		}
 	return scm_from_locale_string(string);
 	}
@@ -94,7 +124,6 @@ static SCM build_row(struct pg_res *pgr) {
 		if (PQgetisnull(pgr->res, pgr->cursor, i))
 			value = scm_from_locale_symbol("null");
 		else {
-			//value = scm_from_locale_string(PQgetvalue(pgr->res, pgr->cursor, i));
 			value = pg_decode(PQgetvalue(pgr->res,
 					pgr->cursor, i),
 					scm_to_int(SCM_CAR(tnode)));
