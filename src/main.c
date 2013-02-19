@@ -11,6 +11,7 @@
 
 #include "postgres.h"
 #include "gtime.h"
+#include "redis.h"
 
 #define DEFAULT_PORT 8080
 #define scm_sym(a) (scm_from_locale_symbol(a))

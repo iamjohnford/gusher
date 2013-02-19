@@ -152,6 +152,15 @@ static SCM redis_del(SCM key) {
 	return scm_from_signed_integer(atoi(&cmd[1]));
 	}
 
+static SCM redis_ping(void) {
+	char reply[64];
+	if (redis_sock < 0) return SCM_BOOL_F;
+	chunk_send("*1\r\n$4\r\nPING\r\n");
+	getrline(reply);
+	if (strcmp(reply, "+PONG") == 0) return SCM_BOOL_T;
+	return SCM_BOOL_F;
+	}
+
 void init_redis(void) {
 	redis_port = DEFAULT_REDIS_PORT;
 	redis_connect();
@@ -159,4 +168,5 @@ void init_redis(void) {
 	scm_c_define_gsubr("redis-append", 2, 0, 0, redis_append);
 	scm_c_define_gsubr("redis-get", 1, 0, 0, redis_get);
 	scm_c_define_gsubr("redis-del", 1, 0, 0, redis_del);
+	scm_c_define_gsubr("redis-ping", 0, 0, 0, redis_ping);
 	}
