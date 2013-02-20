@@ -3,13 +3,27 @@
 #include <libguile.h>
 #include <stdio.h>
 
+static char *make_key(SCM obj) {
+	SCM string;
+	if (scm_is_string(obj)) string = obj;
+	else string = scm_symbol_to_string(obj);
+	return scm_to_locale_string(string);
+	}
+
 static json_t *json_build(SCM obj) {
 	json_t *jobj;
 	SCM node, pair;
+	char *buf;
 	if (scm_is_string(obj)) {
-		char *tmp = scm_to_locale_string(obj);
-		jobj = json_string(tmp);
-		free(tmp);
+		buf = scm_to_locale_string(obj);
+		jobj = json_string(buf);
+		free(buf);
+		return jobj;
+		}
+	if (scm_is_symbol(obj)) {
+		buf = scm_to_locale_string(scm_symbol_to_string(obj));
+		jobj = json_string(buf);
+		free(buf);
 		return jobj;
 		}
 	if (scm_boolean_p(obj) == SCM_BOOL_T)
@@ -24,25 +38,19 @@ static json_t *json_build(SCM obj) {
 			(scm_pair_p(SCM_CAR(obj)) == SCM_BOOL_T)) {
 		char *key;
 		jobj = json_object();
-		node = obj;
-		while (node != SCM_EOL) {
+		for (node = obj; node != SCM_EOL; node = SCM_CDR(node)) {
 			pair = SCM_CAR(node);
-			key = scm_to_locale_string(
-				scm_symbol_to_string(SCM_CAR(pair)));
+			key = make_key(SCM_CAR(pair));
 			json_object_set(jobj, key,
 					json_build(SCM_CDR(pair)));
 			free(key);
-			node = SCM_CDR(node);
 			}
 		return jobj;
 		}
 	if (scm_list_p(obj) == SCM_BOOL_T) {
 		jobj = json_array();
-		node = obj;
-		while (node != SCM_EOL) {
+		for (node = obj; node != SCM_EOL; node = SCM_CDR(node))
 			json_array_append(jobj, json_build(SCM_CAR(node)));
-			node = SCM_CDR(node);
-			}
 		return jobj;
 		}
 	return json_null();
