@@ -19,7 +19,6 @@ struct pg_res {
 
 static scm_t_bits pg_conn_tag;
 static scm_t_bits pg_res_tag;
-static SCM pg_null;
 
 static SCM pg_open(SCM conninfo) {
 	SCM smob;
@@ -122,7 +121,7 @@ static SCM build_row(struct pg_res *pgr) {
 	tnode = pgr->types;
 	for (i = 0; i < pgr->nfields; i++) {
 		if (PQgetisnull(pgr->res, pgr->cursor, i))
-			value = scm_from_locale_symbol("null");
+			value = SCM_EOL;
 		else {
 			value = pg_decode(PQgetvalue(pgr->res,
 					pgr->cursor, i),
@@ -216,6 +215,5 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-fields", 1, 0, 0, pg_fields);
 	scm_c_define_gsubr("pg-get-row", 1, 0, 0, pg_get_row);
 	scm_c_define_gsubr("pg-do-rows", 2, 0, 0, pg_do_rows);
-	pg_null = scm_from_locale_symbol("null");
 	}
 	
