@@ -13,6 +13,7 @@
 #include "gtime.h"
 #include "redis.h"
 #include "json.h"
+#include "template.h"
 
 #define DEFAULT_PORT 8080
 #define scm_sym(a) (scm_from_locale_symbol(a))
@@ -192,6 +193,7 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 		init_time();
 		init_redis();
 		init_json();
+		init_template();
 		scm_c_primitive_load("boot.scm");
 		not_found = scm_c_eval_string("not-found");
 		}
@@ -226,6 +228,7 @@ static void guile_shell(void *closure, int argc, char **argv) {
 	init_time();
 	init_redis();
 	init_json();
+	init_template();
 	//prime_pump(8080);
 fprintf(stderr, "start shell\n");
 	scm_shell(argc, argv);
