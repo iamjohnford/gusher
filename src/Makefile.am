@@ -1,5 +1,5 @@
 bin_PROGRAMS = gusher
-gusher_SOURCES = main.c postgres.c gtime.c redis.c
+gusher_SOURCES = main.c postgres.c gtime.c redis.c json.c
 
 lib1dir = $(libdir)/gusher
 lib1_SCRIPTS = boot.scm
