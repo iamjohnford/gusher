@@ -57,7 +57,7 @@ static json_t *json_build(SCM obj) {
 		for (node = obj; node != SCM_EOL; node = SCM_CDR(node)) {
 			pair = SCM_CAR(node);
 			key = make_key(SCM_CAR(pair));
-			json_object_set(jobj, key,
+			json_object_set_new(jobj, key,
 					json_build(SCM_CDR(pair)));
 			free(key);
 			}
@@ -65,7 +65,8 @@ static json_t *json_build(SCM obj) {
 	else if (scm_list_p(obj) == SCM_BOOL_T) {
 		jobj = json_array();
 		for (node = obj; node != SCM_EOL; node = SCM_CDR(node))
-			json_array_append(jobj, json_build(SCM_CAR(node)));
+			json_array_append_new(jobj,
+					json_build(SCM_CAR(node)));
 		}
 	else jobj = json_null();
 	return jobj;
@@ -74,7 +75,12 @@ static json_t *json_build(SCM obj) {
 static SCM json_encode(SCM obj) {
 	char *buf;
 	SCM string;
-	buf = json_dumps(json_build(obj), JSON_COMPACT);
+	int n;
+	json_t *root;
+	root = json_build(obj);
+	buf = json_dumps(root, JSON_COMPACT);
+	if ((n = root->refcount) > 0)
+		while (n--) json_decref(root);
 	if (buf == NULL) {
 		fprintf(stderr, "JSON encode failed\n");
 		return SCM_BOOL_F;
