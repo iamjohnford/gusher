@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
+#include <uuid/uuid.h>
 
 #include "postgres.h"
 #include "gtime.h"
@@ -190,6 +191,23 @@ static SCM find_handler(const char *url) {
 	return SCM_BOOL_F;
 	}
 
+static SCM uuid_gen(void) {
+	uuid_t out;
+	char buf[33];
+	int i;
+	uuid_generate(out);
+	for (i = 0; i < 16; i++) sprintf(&buf[i * 2], "%02x", out[i]);
+	return scm_from_locale_string((const char *)buf);
+	}
+
+static void init_main(void) {
+	scm_c_define_gsubr("set-handler", 2, 0, 0, set_handler);
+	scm_c_define_gsubr("reply-http", 2, 0, 0, reply_http);
+	scm_c_define_gsubr("not-found", 1, 0, 0, intern_not_found);
+	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
+	scm_c_define("req-handlers", SCM_EOL);
+	}
+
 static int http_callback(void *cls, struct MHD_Connection *conn,
 			const char *url, const char *method,
 			const char *version, const char *upload_data,
@@ -203,10 +221,7 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 		scm_init_guile();
 		mhd_conn_tag = scm_make_smob_type("mhd_conn", 
 			sizeof(struct MHD_Connection *));
-		scm_c_define_gsubr("set-handler", 2, 0, 0, set_handler);
-		scm_c_define_gsubr("reply-http", 2, 0, 0, reply_http);
-		scm_c_define_gsubr("not-found", 1, 0, 0, intern_not_found);
-		scm_c_define("req-handlers", SCM_EOL);
+		init_main();
 		init_postgres();
 		init_time();
 		init_redis();
@@ -242,6 +257,7 @@ static int http_callback(void *cls, struct MHD_Connection *conn,
 
 static void guile_shell(void *closure, int argc, char **argv) {
 	fprintf(stderr, "guile starting\n");
+	init_main();
 	init_postgres();
 	init_time();
 	init_redis();
