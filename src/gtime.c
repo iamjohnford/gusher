@@ -23,7 +23,7 @@ struct g_time {
 	struct tm time;
 	};
 
-static scm_t_bits time_tag;
+scm_t_bits time_tag;
 
 SCM make_time_intern(int year, int month, int day,
 			int hour, int minute, int second) {
@@ -75,7 +75,7 @@ static SCM now_time(void) {
 	return smob;
 	}
 
-static SCM format_time(SCM time, SCM format) {
+SCM format_time(SCM time, SCM format) {
 	SCM ftime;
 	struct g_time *gtime;
 	char *fmt, buf[256];

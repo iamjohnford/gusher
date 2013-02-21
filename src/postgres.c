@@ -22,6 +22,8 @@
 
 #include "gtime.h"
 
+#define c2s(a) (scm_from_locale_string(a))
+
 struct pg_conn {
 	PGconn *conn;
 	};
@@ -219,6 +221,40 @@ static SCM mark_pg_res(SCM smob) {
 	return SCM_BOOL_F;
 	}
 
+static SCM pg_format_sql(SCM conn, SCM obj) {
+	struct pg_conn *pgc;
+	SCM out;
+	if (SCM_SMOB_PREDICATE(time_tag, obj)) {
+		out = format_time(obj, c2s("'%Y-%m-%d %H:%M:%S'"));
+		}
+	else if (scm_boolean_p(obj) == SCM_BOOL_T) {
+		if (scm_is_true(obj)) out = c2s("'t'");
+		else out = c2s("'f'");
+		}
+	else if (scm_is_number(obj)) {
+		out = scm_number_to_string(obj,
+			scm_from_signed_integer(10));
+		}
+	else if (scm_is_symbol(obj)) {
+		out = pg_format_sql(conn, scm_symbol_to_string(obj));
+		}
+	else if (scm_is_string(obj)) {
+		if (scm_string_null_p(obj) == SCM_BOOL_T) out = c2s("NULL");
+		else {
+			char *src = scm_to_locale_string(obj);
+			pgc = (struct pg_conn *)SCM_SMOB_DATA(conn);
+			char *sql = PQescapeLiteral(pgc->conn,
+					src, strlen(src));
+			out = c2s(sql);
+			free(src);
+			PQfreemem(sql);
+			}
+		}
+	else if (scm_is_null(obj)) out = c2s("NULL");
+	else out = c2s("NULL");
+	return out;
+	}
+
 void init_postgres(void) {
 	pg_conn_tag = scm_make_smob_type("pg_conn", sizeof(struct pg_conn));
 	pg_res_tag = scm_make_smob_type("pg_res", sizeof(struct pg_res));
@@ -233,5 +269,6 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-fields", 1, 0, 0, pg_fields);
 	scm_c_define_gsubr("pg-get-row", 1, 0, 0, pg_get_row);
 	scm_c_define_gsubr("pg-do-rows", 2, 0, 0, pg_do_rows);
+	scm_c_define_gsubr("pg-format", 2, 0, 0, pg_format_sql);
 	}
 	
