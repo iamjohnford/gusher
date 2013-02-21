@@ -83,6 +83,7 @@ SCM format_time(SCM time, SCM format) {
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	fmt = scm_to_locale_string(format);
 	strftime(buf, 256, (const char *)fmt, &(gtime->time));
+	scm_remember_upto_here_1(time);
 	ftime = scm_from_locale_string(buf);
 	free(fmt);
 	return ftime;
@@ -96,6 +97,7 @@ static SCM time_diff(SCM time1, SCM time2) {
 	scm_assert_smob_type(time_tag, time2);
 	gtime2 = (struct g_time *)SCM_SMOB_DATA(time2);
 	diff = mktime(&(gtime1->time)) - mktime(&(gtime2->time));
+	scm_remember_upto_here_2(time1, time2);
 	return scm_from_signed_integer(diff);
 	}
 
@@ -120,6 +122,7 @@ static SCM time_add(SCM time, SCM sec) {
 	gtime->time.tm_yday = ltime->tm_yday;
 	gtime->time.tm_isdst = ltime->tm_isdst;
 	SCM_NEWSMOB(smob, time_tag, gtime);
+	scm_remember_upto_here_1(time);
 	return smob;
 	}
 

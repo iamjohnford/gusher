@@ -80,6 +80,7 @@ static SCM pg_exec(SCM conn, SCM query) {
 					"pg_res");
 	query_s = scm_to_locale_string(query);
 	pgr->res = PQexec(pgc->conn, query_s);
+	scm_remember_upto_here_1(conn);
 	free(query_s);
 	pgr->cursor = 0;
 	pgr->fields = SCM_EOL;
@@ -165,6 +166,7 @@ static SCM pg_get_row(SCM res) {
 	if (pgr->cursor >= pgr->tuples) return SCM_BOOL_F;
 	row = build_row(pgr);
 	pgr->cursor++;
+	scm_remember_upto_here_1(res);
 	return row;
 	}
 
@@ -178,6 +180,7 @@ static SCM pg_do_rows(SCM res, SCM func) {
 		}
 	PQclear(pgr->res);
 	pgr->res = NULL;
+	scm_remember_upto_here_1(res);
 	return SCM_UNSPECIFIED;
 	}
 
@@ -199,9 +202,12 @@ static SCM pg_fields(SCM res) {
 
 static SCM pg_tuples(SCM res) {
 	struct pg_res *pgr;
+	SCM out;
 	scm_assert_smob_type(pg_res_tag, res);
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
-	return scm_from_signed_integer(pgr->tuples);
+	out = scm_from_signed_integer(pgr->tuples);
+	scm_remember_upto_here_1(res);
+	return out;
 	}
 
 static size_t free_pg_conn(SCM smob) {

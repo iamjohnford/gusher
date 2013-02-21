@@ -165,6 +165,7 @@ static SCM reply_http(SCM conn_smob, SCM args) {
 		node = SCM_CDR(node);
 		}
 	ret = MHD_queue_response(conn->conn, http_status, resp);
+	scm_remember_upto_here_1(conn_smob);
 	MHD_destroy_response(resp);
 	free(content);
 	return scm_from_signed_integer(ret);
