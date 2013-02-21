@@ -61,6 +61,7 @@ static SCM pg_open(SCM conninfo) {
 
 static SCM pg_close(SCM conn) {
 	struct pg_conn *pgc;
+	scm_assert_smob_type(pg_conn_tag, conn);
 	pgc = (struct pg_conn *)SCM_SMOB_DATA(conn);
 	if (pgc->conn != NULL) PQfinish(pgc->conn);
 	pgc->conn = NULL;
@@ -73,6 +74,7 @@ static SCM pg_exec(SCM conn, SCM query) {
 	char *query_s;
 	int i;
 	SCM res_smob;
+	scm_assert_smob_type(pg_conn_tag, conn);
 	pgc = (struct pg_conn *)SCM_SMOB_DATA(conn);
 	pgr = (struct pg_res *)scm_gc_malloc(sizeof(struct pg_res),
 					"pg_res");
@@ -158,6 +160,7 @@ static SCM build_row(struct pg_res *pgr) {
 static SCM pg_get_row(SCM res) {
 	struct pg_res *pgr;
 	SCM row;
+	scm_assert_smob_type(pg_res_tag, res);
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
 	if (pgr->cursor >= pgr->tuples) return SCM_BOOL_F;
 	row = build_row(pgr);
@@ -167,6 +170,7 @@ static SCM pg_get_row(SCM res) {
 
 static SCM pg_do_rows(SCM res, SCM func) {
 	struct pg_res *pgr;
+	scm_assert_smob_type(pg_res_tag, res);
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
 	while (pgr->cursor < pgr->tuples) {
 		scm_call_1(func, build_row(pgr));
@@ -179,6 +183,7 @@ static SCM pg_do_rows(SCM res, SCM func) {
 
 static SCM pg_clear(SCM res) {
 	struct pg_res *pgr;
+	scm_assert_smob_type(pg_res_tag, res);
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
 	if (pgr->res != NULL) PQclear(pgr->res);
 	pgr->res = NULL;
@@ -187,12 +192,14 @@ static SCM pg_clear(SCM res) {
 
 static SCM pg_fields(SCM res) {
 	struct pg_res *pgr;
+	scm_assert_smob_type(pg_res_tag, res);
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
 	return pgr->fields;
 	}
 
 static SCM pg_tuples(SCM res) {
 	struct pg_res *pgr;
+	scm_assert_smob_type(pg_res_tag, res);
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
 	return scm_from_signed_integer(pgr->tuples);
 	}
@@ -242,6 +249,7 @@ static SCM pg_format_sql(SCM conn, SCM obj) {
 		if (scm_string_null_p(obj) == SCM_BOOL_T) out = c2s("NULL");
 		else {
 			char *src = scm_to_locale_string(obj);
+			scm_assert_smob_type(pg_conn_tag, conn);
 			pgc = (struct pg_conn *)SCM_SMOB_DATA(conn);
 			char *sql = PQescapeLiteral(pgc->conn,
 					src, strlen(src));

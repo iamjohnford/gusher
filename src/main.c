@@ -150,6 +150,7 @@ static SCM reply_http(SCM conn_smob, SCM args) {
 	headers = SCM_CAR(args);
 	args = SCM_CDR(args);
 	content = scm_to_locale_string(SCM_CAR(args));
+	scm_assert_smob_type(mhd_conn_tag, conn_smob);
 	conn = (struct mhd_conn *)SCM_SMOB_DATA(conn_smob);
 	resp = MHD_create_response_from_buffer(strlen(content),
 			(void *)content, MHD_RESPMEM_MUST_COPY);

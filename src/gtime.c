@@ -79,6 +79,7 @@ SCM format_time(SCM time, SCM format) {
 	SCM ftime;
 	struct g_time *gtime;
 	char *fmt, buf[256];
+	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	fmt = scm_to_locale_string(format);
 	strftime(buf, 256, (const char *)fmt, &(gtime->time));
@@ -90,7 +91,9 @@ SCM format_time(SCM time, SCM format) {
 static SCM time_diff(SCM time1, SCM time2) {
 	struct g_time *gtime1, *gtime2;
 	int diff;
+	scm_assert_smob_type(time_tag, time1);
 	gtime1 = (struct g_time *)SCM_SMOB_DATA(time1);
+	scm_assert_smob_type(time_tag, time2);
 	gtime2 = (struct g_time *)SCM_SMOB_DATA(time2);
 	diff = mktime(&(gtime1->time)) - mktime(&(gtime2->time));
 	return scm_from_signed_integer(diff);
@@ -101,6 +104,7 @@ static SCM time_add(SCM time, SCM sec) {
 	SCM smob;
 	time_t ntime;
 	struct tm *ltime;
+	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	ntime = mktime(&(gtime->time)) + scm_to_int(sec);
 	ltime = localtime(&ntime);
@@ -121,36 +125,42 @@ static SCM time_add(SCM time, SCM sec) {
 
 static SCM time_year(SCM time) {
 	struct g_time *gtime;
+	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	return scm_from_signed_integer(gtime->time.tm_year + 1900);
 	}
 
 static SCM time_month(SCM time) {
 	struct g_time *gtime;
+	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	return scm_from_signed_integer(gtime->time.tm_mon + 1);
 	}
 
 static SCM time_mday(SCM time) {
 	struct g_time *gtime;
+	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	return scm_from_signed_integer(gtime->time.tm_mday);
 	}
 
 static SCM time_hour(SCM time) {
 	struct g_time *gtime;
+	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	return scm_from_signed_integer(gtime->time.tm_hour);
 	}
 
 static SCM time_min(SCM time) {
 	struct g_time *gtime;
+	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	return scm_from_signed_integer(gtime->time.tm_min);
 	}
 
 static SCM time_sec(SCM time) {
 	struct g_time *gtime;
+	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	return scm_from_signed_integer(gtime->time.tm_sec);
 	}
