@@ -18,6 +18,7 @@ AC_CHECK_LIB([guile], [scm_boot_guile])
 AC_CHECK_LIB([pq], [PQconnectdb])
 AC_CHECK_LIB([jansson], [json_string])
 AC_CHECK_LIB([uuid], [uuid_generate])
+AC_CHECK_LIB([m], [floor])
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])

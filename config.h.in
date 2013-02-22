@@ -21,6 +21,12 @@
 /* Define to 1 if you have the `guile' library (-lguile). */
 #undef HAVE_LIBGUILE
 
+/* Define to 1 if you have the `jansson' library (-ljansson). */
+#undef HAVE_LIBJANSSON
+
+/* Define to 1 if you have the `m' library (-lm). */
+#undef HAVE_LIBM
+
 /* Define to 1 if you have the `microhttpd' library (-lmicrohttpd). */
 #undef HAVE_LIBMICROHTTPD
 
@@ -29,6 +35,9 @@
 
 /* Define to 1 if you have the `pthread' library (-lpthread). */
 #undef HAVE_LIBPTHREAD
+
+/* Define to 1 if you have the `uuid' library (-luuid). */
+#undef HAVE_LIBUUID
 
 /* Define to 1 if you have the `localtime_r' function. */
 #undef HAVE_LOCALTIME_R
