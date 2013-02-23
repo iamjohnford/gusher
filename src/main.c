@@ -17,6 +17,7 @@
 */
 
 #include <sys/types.h>
+#include <sys/signal.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <netinet/in.h>
@@ -46,10 +47,8 @@ struct handler_entry {
 	struct handler_entry *link;
 	};
 
+static int running;
 static const char *prompt = "eval> ";
-static int background = 0;
-static int sock;
-static int http_port = DEFAULT_PORT;
 static struct handler_entry *handlers = NULL;
 
 static int sorter(const void *a, const void *b) {
@@ -145,16 +144,16 @@ static SCM parse_query(char *query) {
 	return list;
 	}
 
-static void parse_header(char *line, int reqline, SCM *env) {
+static void parse_header(char *line, int reqline, SCM *request) {
 	SCM value, query, qstring;
 	char *mark, *pt;
 	if (reqline) {
 		if (line[0] == 'G') value = makesym("get");
 		else value = makesym("post");
-		addlist(*env, scm_cons(makesym("method"), value));
+		addlist(*request, scm_cons(makesym("method"), value));
 		mark = index(line, ' ') + 1;
 		*(index(mark, ' ')) = '\0';
-		addlist(*env, sym_string("url", mark));
+		addlist(*request, sym_string("url", mark));
 		if ((pt = index(mark, '?')) != NULL) {
 			*pt++ = '\0';
 			qstring = scm_from_locale_string(pt);
@@ -164,18 +163,19 @@ static void parse_header(char *line, int reqline, SCM *env) {
 			query = SCM_EOL;
 			qstring = scm_from_locale_string("");
 			}
-		addlist(*env, sym_string("url-path", mark));
-		addlist(*env, scm_cons(makesym("query-string"), qstring));
-		addlist(*env, scm_cons(makesym("query"), query));
+		addlist(*request, sym_string("url-path", mark));
+		addlist(*request, scm_cons(makesym("query-string"),
+				qstring));
+		addlist(*request, scm_cons(makesym("query"), query));
 		return;
 		}
 	mark = index(line, ':');
 	*mark++ = '\0';
 	while (isblank(*mark)) mark++;
-	addlist(*env, sym_string(downcase(line), mark));
+	addlist(*request, sym_string(downcase(line), mark));
 	}
 
-static SCM default_not_found(SCM env) {
+static SCM default_not_found(SCM request) {
 	SCM resp, headers;
 	resp = SCM_EOL;
 	resp = scm_cons(scm_from_locale_string("Not Found"), resp);
@@ -188,11 +188,12 @@ static SCM default_not_found(SCM env) {
 	return resp;
 	}
 
-static SCM find_handler(SCM env) {
+static SCM find_handler(SCM request) {
 	char *spath;
 	SCM path;
 	struct handler_entry *pt;
-	if ((path = scm_assq_ref(env, makesym("url-path"))) == SCM_BOOL_F)
+	if ((path = scm_assq_ref(request, makesym("url-path")))
+					== SCM_BOOL_F)
 		return SCM_BOOL_F;
 	spath = scm_to_locale_string(path);
 	for (pt = handlers; pt != NULL; pt = pt->link) {
@@ -224,17 +225,19 @@ static char *scm_buf_string(SCM string, char *buf, int size) {
 
 static SCM dispatch(void *data) {
 	socklen_t size;
+	int sock;
 	char *hname, *hvalue, *body, *status;
 	int conn, reqline, eoh, n;
-	SCM env, reply, handler, headers, pair;
+	SCM request, reply, handler, headers, pair;
 	char *mark, *pt, buf[65536];
 	struct sockaddr_in client;
 	size = sizeof(struct sockaddr_in);
-	//sock = *((int *)data);
+	sock = *((int *)data);
 	conn = accept(sock, (struct sockaddr *)&client, &size);
-	env = SCM_EOL;
-	addlist(env, sym_string("remote-host", inet_ntoa(client.sin_addr)));
-	addlist(env, scm_cons(makesym("remote-port"),
+	request = SCM_EOL;
+	addlist(request, sym_string("remote-host",
+				inet_ntoa(client.sin_addr)));
+	addlist(request, scm_cons(makesym("remote-port"),
 		scm_from_signed_integer(ntohs(client.sin_port))));
 	reqline = 1;
 	eoh = 0;
@@ -256,15 +259,15 @@ static SCM dispatch(void *data) {
 				eoh = 1;
 				break;
 				}
-			parse_header(mark, reqline, &env);
+			parse_header(mark, reqline, &request);
 			reqline = 0;
 			mark = pt + 1;
 			}
 		}
-	if ((handler = find_handler(env)) == SCM_BOOL_F) {
+	if ((handler = find_handler(request)) == SCM_BOOL_F) {
 		handler = scm_c_eval_string("not-found");
 		}
-	reply = scm_call_1(handler, env);
+	reply = scm_call_1(handler, request);
 	status = scm_buf_string(SCM_CAR(reply), buf, sizeof(buf));
 	sprintf(buf, "HTTP/1.1 %s\r\n", status);
 	send_all(conn, buf);
@@ -321,15 +324,25 @@ static void init_env(void) {
 	init_template();
 	}
 
+static void signal_handler(int sig) {
+	fprintf(stderr, "aborted by signal %s\n", strsignal(sig));
+	running = 0;
+	}
+
 int main(int argc, char **argv) {
 	fd_set fds;
 	char buf[1024], lambda[1024];
-        int opt, n;
+	int opt, n, sock, optval;
 	int hisock, fdin;
 	SCM display, newline, obj, port, expr, handler;
-        struct sockaddr_in server_addr;    
-        int optval;
-	while ((opt = getopt(argc, argv, "dp:")) != -1) {
+	struct sockaddr_in server_addr;    
+	int http_port;
+	int threading;
+	int background;
+	http_port = DEFAULT_PORT;
+	threading = 1;
+	background = 0;
+	while ((opt = getopt(argc, argv, "mdp:")) != -1) {
 		switch (opt) {
 			case 'p':
 				http_port = atoi(optarg);
@@ -337,11 +350,21 @@ int main(int argc, char **argv) {
 			case 'd':
 				background = 1;
 				break;
+			case 'm':
+				threading = 0;
+				break;
 			default:
 				fprintf(stderr, "invalid option: %c", opt);
 				exit(1);
 			}
 		}
+	if (background) {
+		signal(SIGCHLD, SIG_IGN);
+		if (fork() > 0) _exit(0);
+		}
+	signal(SIGINT, signal_handler);
+	signal(SIGTERM, signal_handler);
+	signal(SIGABRT, signal_handler);
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	optval = 1;
 	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
@@ -362,16 +385,19 @@ int main(int argc, char **argv) {
 	init_env();
 	hisock = fdin = fileno(stdin);
 	if (sock > hisock) hisock = sock;
-	fputs(prompt, stdout);
-	fflush(stdout);
+	if (!background) {
+		fputs(prompt, stdout);
+		fflush(stdout);
+		}
 	display = scm_c_eval_string("display");
 	newline = scm_c_eval_string("newline");
 	handler = scm_c_eval_string("err-handler");
-        while(1) {  
+	running = 1;
+        while(running) {  
 		FD_ZERO(&fds);
 		FD_SET(sock, &fds);
-		FD_SET(fdin, &fds);
-		n = select(hisock + 1, &fds, NULL, NULL, NULL);
+		if (!background) FD_SET(fdin, &fds);
+		select(hisock + 1, &fds, NULL, NULL, NULL);
 		if (FD_ISSET(fdin, &fds)) {
 			n = read(fdin, buf, 1024);
 			if (n == 0) break;
@@ -394,8 +420,11 @@ fflush(stdout);
 			fflush(stdout);
 			}
 		if (FD_ISSET(sock, &fds)) {
-			scm_spawn_thread(dispatch, (void *)&sock,
+			if (threading) {
+				scm_spawn_thread(dispatch, (void *)&sock,
 						NULL, NULL);
+				}
+			else dispatch((void *)&sock);
 			}
 		}
 	fprintf(stderr, "bye!\n");
