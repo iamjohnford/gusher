@@ -299,10 +299,20 @@ static SCM uuid_gen(void) {
 	return scm_from_locale_string((const char *)buf);
 	}
 
+static SCM err_handler(SCM key, SCM rest) {
+	SCM display, newline;
+	display = scm_c_eval_string("display");
+	newline = scm_c_eval_string("newline");
+	scm_call_1(display, rest);
+	scm_call_0(newline);
+	return SCM_UNSPECIFIED;
+	}
+
 static void init_env(void) {
 	scm_c_define_gsubr("set-handler", 2, 0, 0, set_handler);
 	scm_c_define_gsubr("not-found", 1, 0, 0, default_not_found);
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
+	scm_c_define_gsubr("err-handler", 1, 0, 1, err_handler);
 	scm_c_define("req-handlers", SCM_EOL);
 	init_postgres();
 	init_time();
@@ -313,10 +323,10 @@ static void init_env(void) {
 
 int main(int argc, char **argv) {
 	fd_set fds;
-	char buf[1024];
+	char buf[1024], lambda[1024];
         int opt, n;
 	int hisock, fdin;
-	SCM display, newline, obj;
+	SCM display, newline, obj, port, expr, handler;
         struct sockaddr_in server_addr;    
         int optval;
 	while ((opt = getopt(argc, argv, "dp:")) != -1) {
@@ -356,6 +366,7 @@ int main(int argc, char **argv) {
 	fflush(stdout);
 	display = scm_c_eval_string("display");
 	newline = scm_c_eval_string("newline");
+	handler = scm_c_eval_string("err-handler");
         while(1) {  
 		FD_ZERO(&fds);
 		FD_SET(sock, &fds);
@@ -367,9 +378,14 @@ int main(int argc, char **argv) {
 			if (n < 0) printf("err: %s\n", strerror(errno));
 			buf[n] = '\0';
 			while (isspace(buf[--n])) buf[n] = '\0';
-printf("EVAL \"%s\"\n", buf);
+			sprintf(lambda, "(lambda () %s)", buf);
+printf("EVAL %s\n", lambda);
 fflush(stdout);
-			obj = scm_c_eval_string(buf);
+			port = scm_open_input_string(
+				scm_from_locale_string(lambda));
+			expr = scm_read(port);
+			obj = scm_primitive_eval(expr);
+			obj = scm_catch(SCM_BOOL_T, obj, handler);
 			if (obj != SCM_UNSPECIFIED) {
 				scm_call_1(display, obj);
 				scm_call_0(newline);
