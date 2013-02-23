@@ -46,10 +46,10 @@ struct handler_entry {
 	struct handler_entry *link;
 	};
 
+static const char *prompt = "eval> ";
 static int background = 0;
 static int sock;
 static int http_port = DEFAULT_PORT;
-static SCM req_handlers;
 static struct handler_entry *handlers = NULL;
 
 static int sorter(const void *a, const void *b) {
@@ -63,10 +63,12 @@ static SCM set_handler(SCM path, SCM lambda) {
 	struct handler_entry *entry, *pt;
 	struct handler_entry **list;
 	int count, i;
-	req_handlers = scm_cons(lambda, req_handlers);
+	scm_c_define("req-handlers", scm_acons(path, lambda,
+		scm_c_eval_string("req-handlers")));
 	entry = (struct handler_entry *)malloc(
 				sizeof(struct handler_entry));
 	entry->path = scm_to_locale_string(path);
+printf("set handler for %s\n", entry->path);
 	entry->handler = lambda;
 	entry->link = handlers;
 	handlers = entry;
@@ -301,7 +303,7 @@ static void init_env(void) {
 	scm_c_define_gsubr("set-handler", 2, 0, 0, set_handler);
 	scm_c_define_gsubr("not-found", 1, 0, 0, default_not_found);
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
-	req_handlers = SCM_EOL;
+	scm_c_define("req-handlers", SCM_EOL);
 	init_postgres();
 	init_time();
 	init_redis();
@@ -350,7 +352,7 @@ int main(int argc, char **argv) {
 	init_env();
 	hisock = fdin = fileno(stdin);
 	if (sock > hisock) hisock = sock;
-	printf("in> ");
+	fputs(prompt, stdout);
 	fflush(stdout);
 	display = scm_c_eval_string("display");
 	newline = scm_c_eval_string("newline");
@@ -372,7 +374,7 @@ fflush(stdout);
 				scm_call_1(display, obj);
 				scm_call_0(newline);
 				}
-			printf("in> ");
+			fputs(prompt, stdout);
 			fflush(stdout);
 			}
 		if (FD_ISSET(sock, &fds)) {
