@@ -16,15 +16,17 @@
 ** Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
-#include <microhttpd.h>
-#include <libguile.h>
-#include <errno.h>
-#include <stdio.h>
-#include <sys/signal.h>
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/select.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <errno.h>
 #include <string.h>
+#include <libguile.h>
 #include <ctype.h>
 #include <uuid/uuid.h>
 
@@ -34,12 +36,9 @@
 #include "json.h"
 #include "template.h"
 
+#define makesym(s) (scm_from_locale_symbol(s))
+#define addlist(list,item) (list=scm_cons((item),(list)))
 #define DEFAULT_PORT 8080
-#define scm_sym(a) (scm_from_locale_symbol(a))
-
-struct mhd_conn {
-	struct MHD_Connection *conn;
-	};
 
 struct handler_entry {
 	char *path;
@@ -47,14 +46,11 @@ struct handler_entry {
 	struct handler_entry *link;
 	};
 
-static int init_http_guile = 1;
-static scm_t_bits mhd_conn_tag;
-static SCM not_found;
+static int background = 0;
+static int sock;
+static int http_port = DEFAULT_PORT;
+static SCM req_handlers;
 static struct handler_entry *handlers = NULL;
-
-inline SCM string_pair(const char *key, const char *value) {
-	return scm_cons(scm_sym(key), scm_from_locale_string(value));
-	}
 
 static int sorter(const void *a, const void *b) {
 	struct handler_entry **e1, **e2;
@@ -67,6 +63,7 @@ static SCM set_handler(SCM path, SCM lambda) {
 	struct handler_entry *entry, *pt;
 	struct handler_entry **list;
 	int count, i;
+	req_handlers = scm_cons(lambda, req_handlers);
 	entry = (struct handler_entry *)malloc(
 				sizeof(struct handler_entry));
 	entry->path = scm_to_locale_string(path);
@@ -88,109 +85,207 @@ static SCM set_handler(SCM path, SCM lambda) {
 	return SCM_UNSPECIFIED;
 	}
 
-/*static const char *query = "GET / HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
-
-static void prime_pump(int port) {
-	int sock, n, len, sent;
-	struct sockaddr_in *remote;
-	char buf[1024];
-	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	remote = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in));
-	remote->sin_family = AF_INET;
-	inet_pton(AF_INET, "127.0.0.1",
-			(void *)(&(remote->sin_addr.s_addr)));
-	remote->sin_port = htons(port);
-	connect(sock, (struct sockaddr *)remote, sizeof(struct sockaddr));
-	sent = 0;
-	len = strlen(query);
-	while (sent < len) {
-		n = send(sock, query + sent, len - sent, 0);
-		sent += n;
-		}
-	n = recv(sock, buf, 1024, 0);
-	buf[n] = '\0';
-//fprintf(stderr, "REPLY: %s\n", buf);
-	close(sock);
-	free(remote);
-	return;
+static char *downcase(char *buf) {
+	char *pt;
+	for (pt = buf; *pt; pt++) *pt = tolower(*pt);
+	return buf;
 	}
-*/
 
-static int fill_table(void *cls, enum MHD_ValueKind kind,
-			const char *key, const char *value) {
-	SCM *alist;
-	char buf[2048];
-	int i, n;
-	alist = (SCM *)cls;
-	if (value == NULL) value = "";
-	n = strlen(key);
-	for (i = 0; i < n; i++) {
-		if (i >= sizeof(buf)) {
-			i = sizeof(buf) - 1;
-			break;
+inline SCM sym_string(const char *symbol, const char *value) {
+	return scm_cons(makesym(symbol),
+			scm_from_locale_string(value));
+	}
+
+static char decode_hex(char *code) {
+	int c;
+	if (isalpha(code[0])) c = (toupper(code[0]) - 'A' + 10);
+	else c = (code[0] - '0');
+	c <<= 4;
+	if (isalpha(code[1])) c |= (toupper(code[1]) - 'A' + 10);
+	else c |= (code[1] - '0');
+	return (char)c;
+	}
+
+static char *decode_query(char *query) {
+	char *get, *put;
+	get = put = query;
+	while (*get) {
+		if (*get == '+') {
+			*put++ = ' ';
+			get++;
 			}
-		buf[i] = tolower(key[i]);
+		else if ((*get == '%') && isxdigit(*(get + 1))) {
+			*put++ = decode_hex(get + 1);
+			get += 3;
+			}
+		else *put++ = *get++;
 		}
-	buf[i] = '\0';
-	*alist = scm_cons(string_pair(buf, value), *alist);
-	return MHD_YES;
-	}	
-
-static SCM reply_http(SCM conn_smob, SCM args) {
-	struct MHD_Response *resp;
-	struct mhd_conn *conn;
-	SCM node, pair, headers;
-	int ret, n;
-	int http_status;
-	char *content;
-	char hname[256];
-	char hval[256];
-	http_status = scm_to_int(SCM_CAR(args));
-	args = SCM_CDR(args);
-	headers = SCM_CAR(args);
-	args = SCM_CDR(args);
-	content = scm_to_locale_string(SCM_CAR(args));
-	scm_assert_smob_type(mhd_conn_tag, conn_smob);
-	conn = (struct mhd_conn *)SCM_SMOB_DATA(conn_smob);
-	resp = MHD_create_response_from_buffer(strlen(content),
-			(void *)content, MHD_RESPMEM_MUST_COPY);
-	node = headers;
-	while (node != SCM_EOL) {
-		pair = SCM_CAR(node);
-		n = scm_to_locale_stringbuf(SCM_CAR(pair), hname, 256);
-		hname[n] = '\0';
-		n = scm_to_locale_stringbuf(SCM_CDR(pair), hval, 256);
-		hval[n] = '\0';
-		MHD_add_response_header(resp, hname, hval);
-		node = SCM_CDR(node);
-		}
-	ret = MHD_queue_response(conn->conn, http_status, resp);
-	scm_remember_upto_here_1(conn_smob);
-	MHD_destroy_response(resp);
-	free(content);
-	return scm_from_signed_integer(ret);
+	*put = '\0';
+	return query;
 	}
 
-static SCM intern_not_found(SCM conn) {
-	SCM args, headers;
-	args = SCM_EOL;
-	args = scm_cons(scm_from_locale_string("Not Found"), args);
+static SCM parse_query(char *query) {
+	SCM list;
+	char *next, *mark, *eq;
+	list = SCM_EOL;
+	mark = query;
+	while (1) {
+		if ((next = index(mark, '&')) != NULL) {
+			*next++ = '\0';
+			}
+		if ((eq = index(mark, '=')) != NULL) {
+			*eq++ = '\0';
+			addlist(list, sym_string(mark, decode_query(eq)));
+			}
+		if (next == NULL) break;
+		mark = next;
+		}
+	return list;
+	}
+
+static void parse_header(char *line, int reqline, SCM *env) {
+	SCM value, query, qstring;
+	char *mark, *pt;
+	if (reqline) {
+		if (line[0] == 'G') value = makesym("get");
+		else value = makesym("post");
+		addlist(*env, scm_cons(makesym("method"), value));
+		mark = index(line, ' ') + 1;
+		*(index(mark, ' ')) = '\0';
+		addlist(*env, sym_string("url", mark));
+		if ((pt = index(mark, '?')) != NULL) {
+			*pt++ = '\0';
+			qstring = scm_from_locale_string(pt);
+			query = parse_query(pt);
+			}
+		else {
+			query = SCM_EOL;
+			qstring = scm_from_locale_string("");
+			}
+		addlist(*env, sym_string("url-path", mark));
+		addlist(*env, scm_cons(makesym("query-string"), qstring));
+		addlist(*env, scm_cons(makesym("query"), query));
+		return;
+		}
+	mark = index(line, ':');
+	*mark++ = '\0';
+	while (isblank(*mark)) mark++;
+	addlist(*env, sym_string(downcase(line), mark));
+	}
+
+static SCM default_not_found(SCM env) {
+	SCM resp, headers;
+	resp = SCM_EOL;
+	resp = scm_cons(scm_from_locale_string("Not Found"), resp);
 	headers = SCM_EOL;
 	headers = scm_cons(scm_cons(scm_from_locale_string("content-type"),
 				scm_from_locale_string("text/plain")),
 				headers);
-	args = scm_cons(headers, args);
-	args = scm_cons(scm_from_signed_integer(404), args);
-	return reply_http(conn, args);
+	resp = scm_cons(headers, resp);
+	resp = scm_cons(scm_from_locale_string("404 Not Found"), resp);
+	return resp;
 	}
 
-static SCM find_handler(const char *url) {
+static SCM find_handler(SCM env) {
+	char *spath;
+	SCM path;
 	struct handler_entry *pt;
+	if ((path = scm_assq_ref(env, makesym("url-path"))) == SCM_BOOL_F)
+		return SCM_BOOL_F;
+	spath = scm_to_locale_string(path);
 	for (pt = handlers; pt != NULL; pt = pt->link) {
-		if (strncmp(pt->path, url, strlen(pt->path)) == 0)
+		if (strncmp(pt->path, spath, strlen(pt->path)) == 0) {
+			free(spath);
 			return pt->handler;
+			}
 		}
+	free(spath);
 	return SCM_BOOL_F;
+	}
+
+static void send_all(int sock, const char *msg) {
+	int sent, len, n;
+	sent = 0;
+	len = strlen(msg);
+	while (sent < len) {
+		n = send(sock, msg + sent, len - sent, 0);
+		sent += n;
+		}
+	}
+
+static char *scm_buf_string(SCM string, char *buf, int size) {
+	size_t n;
+	n = scm_to_locale_stringbuf(string, buf, size);
+	buf[n] = '\0';
+	return buf;
+	}
+
+static SCM dispatch(void *data) {
+	socklen_t size;
+	char *hname, *hvalue, *body, *status;
+	int conn, reqline, eoh, n;
+	SCM env, reply, handler, headers, pair;
+	char *mark, *pt, buf[65536];
+	struct sockaddr_in client;
+	size = sizeof(struct sockaddr_in);
+	//sock = *((int *)data);
+	conn = accept(sock, (struct sockaddr *)&client, &size);
+	env = SCM_EOL;
+	addlist(env, sym_string("remote-host", inet_ntoa(client.sin_addr)));
+	addlist(env, scm_cons(makesym("remote-port"),
+		scm_from_signed_integer(ntohs(client.sin_port))));
+	reqline = 1;
+	eoh = 0;
+	while (!eoh) {
+		n = recv(conn, buf, sizeof(buf), 0);
+		if (n == 0) {
+			fprintf(stderr, "peer closed connection\n");
+			return SCM_BOOL_F;
+			}
+		if (n < 0) {
+			fprintf(stderr, "bad recv: %s\n", strerror(errno));
+			return SCM_BOOL_F;
+			}
+		mark = buf;
+		while ((pt = index(mark, '\n')) != NULL) {
+			*pt = '\0';
+			if (*(pt - 1) == '\r') *(pt - 1) = '\0';
+			if (strlen(mark) == 0) {
+				eoh = 1;
+				break;
+				}
+			parse_header(mark, reqline, &env);
+			reqline = 0;
+			mark = pt + 1;
+			}
+		}
+	if ((handler = find_handler(env)) == SCM_BOOL_F) {
+		handler = scm_c_eval_string("not-found");
+		}
+	reply = scm_call_1(handler, env);
+	status = scm_buf_string(SCM_CAR(reply), buf, sizeof(buf));
+	sprintf(buf, "HTTP/1.1 %s\r\n", status);
+	send_all(conn, buf);
+	reply = SCM_CDR(reply);
+	headers = SCM_CAR(reply);
+	while (headers != SCM_EOL) {
+		pair = SCM_CAR(headers);
+		hname = scm_buf_string(SCM_CAR(pair), buf, sizeof(buf));
+		hvalue = scm_to_locale_string(SCM_CDR(pair));
+		n = strlen(hvalue);
+		hvalue = scm_buf_string(SCM_CDR(pair), &buf[n + 1],
+				sizeof(buf) - n - 1);
+		sprintf(buf, "%s: %s\r\n", hname, hvalue);
+		send_all(conn, buf);
+		headers = SCM_CDR(headers);
+		}
+	send_all(conn, "\r\n");
+	reply = SCM_CDR(reply);
+	body = scm_to_locale_string(SCM_CAR(reply));
+	send_all(conn, body);
+	free(body);
+	close(conn);
+	return SCM_BOOL_T;
 	}
 
 static SCM uuid_gen(void) {
@@ -202,80 +297,26 @@ static SCM uuid_gen(void) {
 	return scm_from_locale_string((const char *)buf);
 	}
 
-static void init_main(void) {
+static void init_env(void) {
 	scm_c_define_gsubr("set-handler", 2, 0, 0, set_handler);
-	scm_c_define_gsubr("reply-http", 2, 0, 0, reply_http);
-	scm_c_define_gsubr("not-found", 1, 0, 0, intern_not_found);
+	scm_c_define_gsubr("not-found", 1, 0, 0, default_not_found);
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
-	scm_c_define("req-handlers", SCM_EOL);
-	}
-
-static int http_callback(void *cls, struct MHD_Connection *conn,
-			const char *url, const char *method,
-			const char *version, const char *upload_data,
-			size_t *upload_data_size, void **con_cls) {
-	SCM headers, query, cookies, conn_smob;
-	SCM handler;
-	int kind;
-	struct mhd_conn *mconn;
-	if (init_http_guile) {
-		init_http_guile = 0;
-		scm_init_guile();
-		mhd_conn_tag = scm_make_smob_type("mhd_conn", 
-			sizeof(struct MHD_Connection *));
-		init_main();
-		init_postgres();
-		init_time();
-		init_redis();
-		init_json();
-		init_template();
-		scm_c_primitive_load("boot.scm");
-		not_found = scm_c_eval_string("not-found");
-		}
-	mconn = (struct mhd_conn *)scm_gc_malloc(sizeof(struct mhd_conn),
-					"mhd_conn");
-	mconn->conn = conn;
-	SCM_NEWSMOB(conn_smob, mhd_conn_tag, mconn);
-	if ((handler = find_handler(url)) == SCM_BOOL_F) {
-		scm_call_1(not_found, conn_smob);
-		return MHD_YES;
-		}
-	headers = SCM_EOL;
-	MHD_get_connection_values(conn, MHD_HEADER_KIND, fill_table,
-				(void *)&headers);
-	headers = scm_cons(string_pair("method", method), headers);
-	headers = scm_cons(string_pair("uri", url), headers);
-	headers = scm_cons(string_pair("version", version), headers);
-	query = SCM_EOL;
-	if (strcmp(method, "POST") == 0) kind = MHD_POSTDATA_KIND;
-	else kind = MHD_GET_ARGUMENT_KIND;
-	MHD_get_connection_values(conn, kind, fill_table, (void *)&query);
-	cookies = SCM_EOL;
-	MHD_get_connection_values(conn, MHD_COOKIE_KIND, fill_table,
-				(void *)&cookies);
-	reply_http(conn_smob, scm_call_3(handler, headers, query, cookies));
-	return MHD_YES;
-	}
-
-static void guile_shell(void *closure, int argc, char **argv) {
-	fprintf(stderr, "guile starting\n");
-	init_main();
+	req_handlers = SCM_EOL;
 	init_postgres();
 	init_time();
 	init_redis();
 	init_json();
 	init_template();
-	//prime_pump(8080);
-fprintf(stderr, "start shell\n");
-	scm_shell(argc, argv);
 	}
 
 int main(int argc, char **argv) {
-	struct MHD_Daemon *daemon;
-	int http_port, opt;
-	int background;
-	http_port = DEFAULT_PORT;
-	background = 0;
+	fd_set fds;
+	char buf[1024];
+        int opt, n;
+	int hisock, fdin;
+	SCM display, newline, obj;
+        struct sockaddr_in server_addr;    
+        int optval;
 	while ((opt = getopt(argc, argv, "dp:")) != -1) {
 		switch (opt) {
 			case 'p':
@@ -289,28 +330,57 @@ int main(int argc, char **argv) {
 				exit(1);
 			}
 		}
-	if (background) {
-		signal(SIGCHLD, SIG_IGN);
-		if (fork() > 0) _exit(0);
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	optval = 1;
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+	memset(&server_addr, 0, sizeof(struct sockaddr_in));
+        server_addr.sin_family = AF_INET;         
+        server_addr.sin_port = htons(http_port);
+        server_addr.sin_addr.s_addr = INADDR_ANY; 
+        if (bind(sock, (struct sockaddr *)&server_addr,
+			sizeof(struct sockaddr_in)) != 0) {
+		fprintf(stderr, "can't bind: %s\n", strerror(errno));
+		exit(1);
+		};
+        if (listen(sock, 5) != 0) {
+		fprintf(stderr, "can't listen: %s\n", strerror(errno));
+		exit(1);
 		}
-	daemon = MHD_start_daemon(MHD_USE_SELECT_INTERNALLY,
-			http_port,
-			NULL,
-			NULL,
-			&http_callback,
-			NULL,
-			MHD_OPTION_END);
-	if (daemon == NULL) {
-		fprintf(stderr, "can't start daemon: %s.\n", strerror(errno));
-		return 1;
+	scm_init_guile();
+	init_env();
+	hisock = fdin = fileno(stdin);
+	if (sock > hisock) hisock = sock;
+	printf("in> ");
+	fflush(stdout);
+	display = scm_c_eval_string("display");
+	newline = scm_c_eval_string("newline");
+        while(1) {  
+		FD_ZERO(&fds);
+		FD_SET(sock, &fds);
+		FD_SET(fdin, &fds);
+		n = select(hisock + 1, &fds, NULL, NULL, NULL);
+		if (FD_ISSET(fdin, &fds)) {
+			n = read(fdin, buf, 1024);
+			if (n == 0) break;
+			if (n < 0) printf("err: %s\n", strerror(errno));
+			buf[n] = '\0';
+			while (isspace(buf[--n])) buf[n] = '\0';
+printf("EVAL \"%s\"\n", buf);
+fflush(stdout);
+			obj = scm_c_eval_string(buf);
+			if (obj != SCM_UNSPECIFIED) {
+				scm_call_1(display, obj);
+				scm_call_0(newline);
+				}
+			printf("in> ");
+			fflush(stdout);
+			}
+		if (FD_ISSET(sock, &fds)) {
+			scm_spawn_thread(dispatch, (void *)&sock,
+						NULL, NULL);
+			}
 		}
-	if (background) {
-		while (1) sleep(1);
-		}
-	else {
-		//prime_pump(8080);
-		scm_boot_guile(argc, argv, guile_shell, 0);
-		}
-	MHD_stop_daemon(daemon);
+	fprintf(stderr, "bye!\n");
+	close(sock);
 	return 0;
-	}
+	} 

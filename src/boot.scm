@@ -23,23 +23,23 @@ FOO!
 ")
 
 (define (plain-text body)
-	(list 200 '(("content-type" . "text/plain")) body)
+	(list "200 OK" '(("content-type" . "text/plain")) body)
 	)
 (define (send-html body)
-	(list 200 '(("content-type" . "text/html")) body)
+	(list "200 OK" '(("content-type" . "text/html")) body)
 	)
 (set-handler "/index"
-	(lambda (headers query cookies)
+	(lambda (env)
 		(send-html html)
 		)
 	)
 (set-handler "/foo"
-	(lambda (headers query cookies)
+	(lambda (env)
 		(send-html foo)
 		)
 	)
 (set-handler "/foo/bar"
-	(lambda (headers query cookies)
+	(lambda (env)
 		(send-html "BAR!")
 		)
 	)
