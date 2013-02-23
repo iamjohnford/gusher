@@ -383,6 +383,11 @@ int main(int argc, char **argv) {
 		}
 	scm_init_guile();
 	init_env();
+	while (optind < argc) {
+		fprintf(stderr, "load %s\n", argv[optind]);
+		scm_c_primitive_load(argv[optind]);
+		optind++;
+		}
 	hisock = fdin = fileno(stdin);
 	if (sock > hisock) hisock = sock;
 	if (!background) {
