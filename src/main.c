@@ -36,6 +36,7 @@
 #include "redis.h"
 #include "json.h"
 #include "template.h"
+#include "mongodb.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
 #define addlist(list,item) (list=scm_cons((item),(list)))
@@ -322,6 +323,11 @@ static void init_env(void) {
 	init_redis();
 	init_json();
 	init_template();
+	init_mongodb();
+	}
+
+static void shutdown_env(void) {
+	shutdown_mongodb();
 	}
 
 static void signal_handler(int sig) {
@@ -434,5 +440,6 @@ fflush(stdout);
 		}
 	fprintf(stderr, "bye!\n");
 	close(sock);
+	shutdown_env();
 	return 0;
 	} 
