@@ -321,7 +321,7 @@ static void init_env(void) {
 	scm_c_define("req-handlers", SCM_EOL);
 	init_postgres();
 	init_time();
-	init_redis();
+	init_cache();
 	init_json();
 	init_template();
 	init_mongodb();
@@ -330,6 +330,7 @@ static void init_env(void) {
 
 static void shutdown_env(void) {
 	shutdown_mongodb();
+	shutdown_inotify();
 	}
 
 static void signal_handler(int sig) {

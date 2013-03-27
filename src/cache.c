@@ -212,12 +212,12 @@ fprintf(stderr, "load %s from cache\n", spath);
 		}
 	if (stat(spath, &bstat) != 0) {
 		free(spath);
-		perror("redis-get-file[1]");
+		perror("cache-get-file[1]");
 		return SCM_BOOL_F;
 		}
 	if ((fd = open(spath, O_RDONLY)) < 0) {
 		free(spath);
-		perror("redis-get-file[2]");
+		perror("cache-get-file[2]");
 		return SCM_BOOL_F;
 		}
 	buf = (char *)malloc(bstat.st_size + 1);
@@ -265,7 +265,6 @@ static SCM redis_ping(void) {
 
 static SCM edit_watch_handler(SCM path, SCM mask) {
 	char *spath;
-	int count;
 	spath = scm_to_locale_string(path);
 	send_header("HDEL", 2);
 	send_arg("file-cache");
@@ -276,21 +275,22 @@ static SCM edit_watch_handler(SCM path, SCM mask) {
 	}
 
 static SCM watch_edit(SCM dir) {
+	if (redis_sock < 0) return SCM_BOOL_F;
 	return add_watch(dir, scm_from_uint32(IN_CLOSE_WRITE),
 		scm_c_make_gsubr("edit_watch_handler", 2, 0, 0, edit_watch_handler));
 	}
 
-void init_redis(void) {
+void init_cache(void) {
 	redis_port = DEFAULT_REDIS_PORT;
 	redis_connect();
-	scm_c_define_gsubr("redis-set", 2, 0, 0, redis_set);
-	scm_c_define_gsubr("redis-hset", 3, 0, 0, redis_hset);
-	scm_c_define_gsubr("redis-append", 2, 0, 0, redis_append);
-	scm_c_define_gsubr("redis-get", 1, 0, 0, redis_get);
-	scm_c_define_gsubr("redis-hget", 2, 0, 0, redis_hget);
-	scm_c_define_gsubr("redis-get-file", 1, 0, 0, redis_get_file);
-	scm_c_define_gsubr("redis-del", 1, 0, 0, redis_del);
-	scm_c_define_gsubr("redis-ping", 0, 0, 0, redis_ping);
-	scm_c_define_gsubr("redis-exists", 1, 0, 0, redis_exists);
+	scm_c_define_gsubr("cache-set", 2, 0, 0, redis_set);
+	scm_c_define_gsubr("cache-hset", 3, 0, 0, redis_hset);
+	scm_c_define_gsubr("cache-append", 2, 0, 0, redis_append);
+	scm_c_define_gsubr("cache-get", 1, 0, 0, redis_get);
+	scm_c_define_gsubr("cache-hget", 2, 0, 0, redis_hget);
+	scm_c_define_gsubr("cache-get-file", 1, 0, 0, redis_get_file);
+	scm_c_define_gsubr("cache-del", 1, 0, 0, redis_del);
+	scm_c_define_gsubr("cache-ping", 0, 0, 0, redis_ping);
+	scm_c_define_gsubr("cache-exists", 1, 0, 0, redis_exists);
 	scm_c_define_gsubr("watch-edit", 1, 0, 0, watch_edit);
 	}
