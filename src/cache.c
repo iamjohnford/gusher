@@ -28,6 +28,8 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#include "gnotify.h"
+
 #define DEFAULT_REDIS_PORT 6379
 
 static int redis_sock = -1;
@@ -261,6 +263,23 @@ static SCM redis_ping(void) {
 	return SCM_BOOL_F;
 	}
 
+static SCM edit_watch_handler(SCM path, SCM mask) {
+	char *spath;
+	int count;
+	spath = scm_to_locale_string(path);
+	send_header("HDEL", 2);
+	send_arg("file-cache");
+	send_arg(spath);
+	getrline(NULL);
+	free(spath);
+	return SCM_BOOL_T;
+	}
+
+static SCM watch_edit(SCM dir) {
+	return add_watch(dir, scm_from_uint32(IN_CLOSE_WRITE),
+		scm_c_make_gsubr("edit_watch_handler", 2, 0, 0, edit_watch_handler));
+	}
+
 void init_redis(void) {
 	redis_port = DEFAULT_REDIS_PORT;
 	redis_connect();
@@ -273,4 +292,5 @@ void init_redis(void) {
 	scm_c_define_gsubr("redis-del", 1, 0, 0, redis_del);
 	scm_c_define_gsubr("redis-ping", 0, 0, 0, redis_ping);
 	scm_c_define_gsubr("redis-exists", 1, 0, 0, redis_exists);
+	scm_c_define_gsubr("watch-edit", 1, 0, 0, watch_edit);
 	}

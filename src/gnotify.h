@@ -16,5 +16,9 @@
 ** Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
+#include <sys/inotify.h>
+#include <libguile.h>
+
 void init_inotify(void);
+SCM add_watch(SCM, SCM, SCM);
 void shutdown_inotify(void);

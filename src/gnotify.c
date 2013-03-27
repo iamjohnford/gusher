@@ -26,7 +26,7 @@
 
 static int infd = -1;
 
-static SCM add_watch(SCM path, SCM mask, SCM handler) {
+SCM add_watch(SCM path, SCM mask, SCM handler) {
 	char *spath;
 	uint32_t imask;
 	struct stat bstat;
