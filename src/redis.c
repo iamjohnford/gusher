@@ -22,6 +22,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <libguile.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #define DEFAULT_REDIS_PORT 6379
 
@@ -54,18 +59,35 @@ static void chunk_send(const char *chunk) {
 	return;
 	}
 
+static void send_header(const char *cmd, int args) {
+	char buf[64];
+	sprintf(buf, "*%d\r\n$%ld\r\n%s\r\n", args + 1, strlen(cmd), cmd);
+	chunk_send(buf);
+	return;
+	}
+
+static void send_arg(const char *arg) {
+	char fmt[32];
+	sprintf(fmt, "$%ld\r\n", strlen(arg));
+	chunk_send(fmt);
+	chunk_send(arg);
+	chunk_send("\r\n");
+	return;
+	}
+
 static void getrline(char *buf) {
 	int i;
 	char c;
 	i = 0;
 	do {
 		recv(redis_sock, &c, 1, 0);
-		buf[i++] = c;
+		if (buf != NULL) buf[i++] = c;
 		} while (c != '\n');
-	buf[i - 2] = '\0';
+	if (buf != NULL) buf[i - 2] = '\0';
 	return;
 	}
 
+/*
 static char *redis_request(const char *cmd, char *response) {
 	int size;
 	char reply[1024];
@@ -93,56 +115,53 @@ static char *redis_request(const char *cmd, char *response) {
 		}
 	return response;
 	}
-
-static void redis_set_append(const char *key, const char *value,
-				const char *template) {
-	char cmd[256];
-	sprintf(cmd, template, strlen(key));
-	chunk_send(cmd);
-	chunk_send(key);
-	sprintf(cmd, "\r\n$%ld\r\n", strlen(value));
-	chunk_send(cmd);
-	chunk_send(value);
-	chunk_send("\r\n");
-	getrline(cmd);
-	return;
-	}
+*/
 
 static SCM redis_set(SCM key, SCM value) {
 	char *ckey, *cvalue;
 	if (redis_sock < 0) return SCM_BOOL_F;
-	ckey = scm_to_locale_string(key);
-	cvalue = scm_to_locale_string(value);
-	redis_set_append(ckey, cvalue, 
-			"*3\r\n$3\r\nSET\r\n$%ld\r\n");
+	send_header("SET", 2);
+	send_arg(ckey = scm_to_locale_string(key));
+	send_arg(cvalue = scm_to_locale_string(value));
 	free(ckey);
 	free(cvalue);
+	getrline(NULL);
+	return SCM_BOOL_T;
+	}
+
+static SCM redis_hset(SCM key, SCM field, SCM value) {
+	char *ckey, *cvalue;
+	if (redis_sock < 0) return SCM_BOOL_F;
+	send_header("HSET", 3);
+	send_arg(ckey = scm_to_locale_string(key));
+	free(ckey);
+	send_arg(ckey = scm_to_locale_string(field));
+	free(ckey);
+	send_arg(cvalue = scm_to_locale_string(value));
+	free(cvalue);
+	getrline(NULL);
 	return SCM_BOOL_T;
 	}
 
 static SCM redis_append(SCM key, SCM value) {
 	char *ckey, *cvalue;
 	if (redis_sock < 0) return SCM_BOOL_F;
-	ckey = scm_to_locale_string(key);
-	cvalue = scm_to_locale_string(value);
-	redis_set_append(ckey, cvalue, 
-			"*3\r\n$6\r\nAPPEND\r\n$%ld\r\n");
+	send_header("APPEND", 2);
+	send_arg(ckey = scm_to_locale_string(key));
+	send_arg(cvalue = scm_to_locale_string(value));
 	free(ckey);
 	free(cvalue);
+	getrline(NULL);
 	return SCM_BOOL_T;
 	}
 
 static SCM redis_get(SCM key) {
 	char *ckey;
 	char cmd[256], *value;
-	SCM string;
 	int size;
 	if (redis_sock < 0) return SCM_BOOL_F;
-	ckey = scm_to_locale_string(key);
-	sprintf(cmd, "*2\r\n$3\r\nGET\r\n$%ld\r\n", strlen(ckey));
-	chunk_send(cmd);
-	chunk_send(ckey);
-	chunk_send("\r\n");
+	send_header("GET", 1);
+	send_arg(ckey = scm_to_locale_string(key));
 	free(ckey);
 	getrline(cmd);
 	if ((size = atoi(&cmd[1])) < 0) return SCM_BOOL_F;
@@ -150,29 +169,93 @@ static SCM redis_get(SCM key) {
 	recv(redis_sock, value, size, 0);
 	value[size] = '\0';
 	recv(redis_sock, cmd, 2, 0);
-	string = scm_from_locale_string(value);
-	free(value);
-	return string;
+	return scm_take_locale_string(value);
+	}
+
+static SCM redis_hget(SCM key, SCM field) {
+	char *ckey;
+	char cmd[256], *value;
+	int size;
+	if (redis_sock < 0) return SCM_BOOL_F;
+	send_header("HGET", 2);
+	send_arg(ckey = scm_to_locale_string(key));
+	free(ckey);
+	send_arg(ckey = scm_to_locale_string(field));
+	free(ckey);
+	getrline(cmd);
+	if ((size = atoi(&cmd[1])) < 0) return SCM_BOOL_F;
+	value = (char *)malloc(size + 1);
+	recv(redis_sock, value, size, 0);
+	value[size] = '\0';
+	recv(redis_sock, cmd, 2, 0);
+	return scm_take_locale_string(value);
+	}
+
+static SCM redis_get_file(SCM path) {
+	char *spath, *buf, cmd[12];
+	struct stat bstat;
+	SCM key, content;
+	int fd, n;
+	if (redis_sock < 0) return SCM_BOOL_F;
+	key = scm_from_locale_string("file-cache");
+	spath = scm_to_locale_string(path);
+	send_header("HEXISTS", 2);
+	send_arg("file-cache");
+	send_arg(spath);
+	getrline(cmd);
+	if (atoi(&cmd[1]) == 1) {
+fprintf(stderr, "load %s from cache\n", spath);
+		free(spath);
+		return redis_hget(key, path);
+		}
+	if (stat(spath, &bstat) != 0) {
+		free(spath);
+		perror("redis-get-file[1]");
+		return SCM_BOOL_F;
+		}
+	if ((fd = open(spath, O_RDONLY)) < 0) {
+		free(spath);
+		perror("redis-get-file[2]");
+		return SCM_BOOL_F;
+		}
+	buf = (char *)malloc(bstat.st_size + 1);
+	n = read(fd, (void *)buf, bstat.st_size);
+	buf[n] = '\0';
+	close(fd);
+	content = scm_take_locale_string(buf);
+	redis_hset(key, path, content);
+fprintf(stderr, "load %s from FS\n", spath);
+	free(spath);
+	return content;
 	}
 
 static SCM redis_del(SCM key) {
 	char *ckey;
 	char cmd[256];
 	if (redis_sock < 0) return SCM_BOOL_F;
-	ckey = scm_to_locale_string(key);
-	sprintf(cmd, "*2\r\n$3\r\nDEL\r\n$%ld\r\n", strlen(ckey));
-	chunk_send(cmd);
-	chunk_send(ckey);
-	chunk_send("\r\n");
+	send_header("DEL", 1);
+	send_arg(ckey = scm_to_locale_string(key));
 	free(ckey);
 	getrline(cmd);
 	return scm_from_signed_integer(atoi(&cmd[1]));
 	}
 
+static SCM redis_exists(SCM key) {
+	char *ckey;
+	char cmd[256];
+	if (redis_sock < 0) return SCM_BOOL_F;
+	send_header("EXISTS", 1);
+	send_arg(ckey = scm_to_locale_string(key));
+	free(ckey);
+	getrline(cmd);
+	if (atoi(&cmd[1]) == 1) return SCM_BOOL_T;
+	return SCM_BOOL_F;
+	}
+
 static SCM redis_ping(void) {
 	char reply[64];
 	if (redis_sock < 0) return SCM_BOOL_F;
-	chunk_send("*1\r\n$4\r\nPING\r\n");
+	send_header("PING", 0);
 	getrline(reply);
 	if (strcmp(reply, "+PONG") == 0) return SCM_BOOL_T;
 	return SCM_BOOL_F;
@@ -182,8 +265,12 @@ void init_redis(void) {
 	redis_port = DEFAULT_REDIS_PORT;
 	redis_connect();
 	scm_c_define_gsubr("redis-set", 2, 0, 0, redis_set);
+	scm_c_define_gsubr("redis-hset", 3, 0, 0, redis_hset);
 	scm_c_define_gsubr("redis-append", 2, 0, 0, redis_append);
 	scm_c_define_gsubr("redis-get", 1, 0, 0, redis_get);
+	scm_c_define_gsubr("redis-hget", 2, 0, 0, redis_hget);
+	scm_c_define_gsubr("redis-get-file", 1, 0, 0, redis_get_file);
 	scm_c_define_gsubr("redis-del", 1, 0, 0, redis_del);
 	scm_c_define_gsubr("redis-ping", 0, 0, 0, redis_ping);
+	scm_c_define_gsubr("redis-exists", 1, 0, 0, redis_exists);
 	}
