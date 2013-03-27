@@ -33,10 +33,11 @@
 
 #include "postgres.h"
 #include "gtime.h"
-#include "redis.h"
+#include "cache.h"
 #include "json.h"
 #include "template.h"
 #include "mongodb.h"
+#include "gnotify.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
 #define addlist(list,item) (list=scm_cons((item),(list)))
@@ -324,6 +325,7 @@ static void init_env(void) {
 	init_json();
 	init_template();
 	init_mongodb();
+	init_inotify();
 	}
 
 static void shutdown_env(void) {
