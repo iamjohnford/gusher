@@ -19,6 +19,8 @@
 #include <sys/inotify.h>
 #include <libguile.h>
 
+extern int inotify_fd;
 void init_inotify(void);
+void process_inotify_event(void);
 SCM add_watch(SCM, SCM, SCM);
 void shutdown_inotify(void);

@@ -64,8 +64,8 @@ static SCM set_handler(SCM path, SCM lambda) {
 	struct handler_entry *entry, *pt;
 	struct handler_entry **list;
 	int count, i;
-	scm_c_define("req-handlers", scm_acons(path, lambda,
-		scm_c_eval_string("req-handlers")));
+	scm_c_define("responders", scm_acons(path, lambda,
+		scm_c_eval_string("responders")));
 	entry = (struct handler_entry *)malloc(
 				sizeof(struct handler_entry));
 	entry->path = scm_to_locale_string(path);
@@ -231,7 +231,7 @@ static SCM dispatch(void *data) {
 	char *hname, *hvalue, *body, *status;
 	int conn, reqline, eoh, n;
 	SCM request, reply, handler, headers, pair;
-	char *mark, *pt, buf[65536];
+	char *mark, *pt, buf[65536], sbuf[256];
 	struct sockaddr_in client;
 	size = sizeof(struct sockaddr_in);
 	sock = *((int *)data);
@@ -271,19 +271,18 @@ static SCM dispatch(void *data) {
 		}
 	reply = scm_call_1(handler, request);
 	status = scm_buf_string(SCM_CAR(reply), buf, sizeof(buf));
-	sprintf(buf, "HTTP/1.1 %s\r\n", status);
-	send_all(conn, buf);
+	sprintf(sbuf, "HTTP/1.1 %s\r\n", status);
+	send_all(conn, sbuf);
 	reply = SCM_CDR(reply);
 	headers = SCM_CAR(reply);
 	while (headers != SCM_EOL) {
 		pair = SCM_CAR(headers);
 		hname = scm_buf_string(SCM_CAR(pair), buf, sizeof(buf));
-		hvalue = scm_to_locale_string(SCM_CDR(pair));
-		n = strlen(hvalue);
-		hvalue = scm_buf_string(SCM_CDR(pair), &buf[n + 1],
-				sizeof(buf) - n - 1);
-		sprintf(buf, "%s: %s\r\n", hname, hvalue);
-		send_all(conn, buf);
+		send_all(conn, hname);
+		send_all(conn, ": ");
+		hvalue = scm_buf_string(SCM_CDR(pair), buf, sizeof(buf));
+		send_all(conn, hvalue);
+		send_all(conn, "\r\n");
 		headers = SCM_CDR(headers);
 		}
 	send_all(conn, "\r\n");
@@ -314,11 +313,11 @@ static SCM err_handler(SCM key, SCM rest) {
 	}
 
 static void init_env(void) {
-	scm_c_define_gsubr("set-handler", 2, 0, 0, set_handler);
+	scm_c_define_gsubr("http", 2, 0, 0, set_handler);
 	scm_c_define_gsubr("not-found", 1, 0, 0, default_not_found);
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
 	scm_c_define_gsubr("err-handler", 1, 0, 1, err_handler);
-	scm_c_define("req-handlers", SCM_EOL);
+	scm_c_define("responders", SCM_EOL);
 	init_postgres();
 	init_time();
 	init_cache();
@@ -399,6 +398,7 @@ int main(int argc, char **argv) {
 		}
 	hisock = fdin = fileno(stdin);
 	if (sock > hisock) hisock = sock;
+	if (inotify_fd > hisock) hisock = inotify_fd;
 	if (!background) {
 		fputs(prompt, stdout);
 		fflush(stdout);
@@ -410,6 +410,7 @@ int main(int argc, char **argv) {
         while(running) {  
 		FD_ZERO(&fds);
 		FD_SET(sock, &fds);
+		FD_SET(inotify_fd, &fds);
 		if (!background) FD_SET(fdin, &fds);
 		select(hisock + 1, &fds, NULL, NULL, NULL);
 		if (FD_ISSET(fdin, &fds)) {
@@ -417,6 +418,9 @@ int main(int argc, char **argv) {
 			if (n == 0) break;
 			if (n < 0) printf("err: %s\n", strerror(errno));
 			buf[n] = '\0';
+			//obj = scm_c_eval_string(buf);
+			//scm_call_1(scm_c_eval_string("write"), obj);
+			//scm_call_0(newline);
 			while (isspace(buf[--n])) buf[n] = '\0';
 			sprintf(lambda, "(lambda () %s)", buf);
 printf("EVAL %s\n", lambda);
@@ -440,6 +444,7 @@ fflush(stdout);
 				}
 			else dispatch((void *)&sock);
 			}
+		if (FD_ISSET(inotify_fd, &fds)) process_inotify_event();
 		}
 	fprintf(stderr, "bye!\n");
 	close(sock);

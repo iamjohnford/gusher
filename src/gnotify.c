@@ -24,7 +24,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static int infd = -1;
+int inotify_fd = -1;
 
 SCM add_watch(SCM path, SCM mask, SCM handler) {
 	char *spath;
@@ -39,7 +39,7 @@ SCM add_watch(SCM path, SCM mask, SCM handler) {
 		return SCM_BOOL_F;
 		}
 	imask = scm_to_uint32(mask);
-	wd = inotify_add_watch(infd, spath, imask);
+	wd = inotify_add_watch(inotify_fd, spath, imask);
 	if (wd < 0) {
 		perror("add_watch[2]");
 		free(spath);
@@ -69,7 +69,7 @@ static SCM rm_watch(SCM path) {
 		if (strcmp(spath, stpath) == 0) {
 			wd = SCM_CADR(tuple);
 			iwd = scm_to_int(wd);
-			inotify_rm_watch(infd, iwd);
+			inotify_rm_watch(inotify_fd, iwd);
 			}
 		else rest = scm_cons(tuple, rest);
 		free(stpath);
@@ -104,43 +104,35 @@ static char *read_event(int fd) {
 	return buf;
 	}
 
-static SCM watch(void *data) {
-	fd_set fds;
+void process_inotify_event() {
 	char *path, *fpath;
 	struct inotify_event *event;
-	int nfds;
 	SCM node, tuple, proc;
-	nfds = infd + 8;
-	while (1) {
-		FD_ZERO(&fds);
-		FD_SET(infd, &fds);
-		select(nfds, &fds, NULL, NULL, NULL);
-		event = (struct inotify_event *)read_event(infd);
-		node = scm_c_eval_string("inotify-watched");
-		while (node != SCM_EOL) {
-			tuple = SCM_CAR(node);
-			if (event->wd == scm_to_int(SCM_CADR(tuple))) {
-				path = scm_to_locale_string(SCM_CAR(tuple));
-				proc = SCM_CADDR(tuple);
-				fpath = (char *)malloc(strlen(path) +
-						strlen(event->name) + 2);
-				sprintf(fpath, "%s/%s", path, event->name);
-				scm_call_2(proc,
-					scm_take_locale_string(fpath),
-					scm_from_uint32(event->mask)
-					);
-				free(path);
-				break;
-				}
-			node = SCM_CDR(node);
+	event = (struct inotify_event *)read_event(inotify_fd);
+	node = scm_c_eval_string("inotify-watched");
+	while (node != SCM_EOL) {
+		tuple = SCM_CAR(node);
+		if (event->wd == scm_to_int(SCM_CADR(tuple))) {
+			path = scm_to_locale_string(SCM_CAR(tuple));
+			proc = SCM_CADDR(tuple);
+			fpath = (char *)malloc(strlen(path) +
+					strlen(event->name) + 2);
+			sprintf(fpath, "%s/%s", path, event->name);
+			scm_call_2(proc,
+				scm_take_locale_string(fpath),
+				scm_from_uint32(event->mask)
+				);
+			free(path);
+			break;
 			}
-		free(event);
+		node = SCM_CDR(node);
 		}
-	return SCM_UNSPECIFIED;
+	free(event);
+	return;
 	}
 
 void init_inotify() {
-	infd = inotify_init();
+	inotify_fd = inotify_init();
 	scm_c_define("inotify-watched", SCM_EOL);
 	mask_const("inotify-modify", IN_MODIFY);
 	mask_const("inotify-access", IN_ACCESS);
@@ -156,10 +148,9 @@ void init_inotify() {
 	mask_const("inotify-close-write", IN_CLOSE_WRITE);
 	scm_c_define_gsubr("inotify-add-watch", 3, 0, 0, add_watch);
 	scm_c_define_gsubr("inotify-rm-watch", 1, 0, 0, rm_watch);
-	scm_spawn_thread(watch, NULL, NULL, NULL);
 	}
 
 void shutdown_inotify() {
-	if (infd > 0) close(infd);
+	if (inotify_fd > 0) close(inotify_fd);
 	}
 
