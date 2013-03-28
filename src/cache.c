@@ -31,6 +31,7 @@
 #include "gnotify.h"
 
 #define DEFAULT_REDIS_PORT 6379
+#define FILE_CACHE "file-cache"
 
 static int redis_sock = -1;
 static int redis_port;
@@ -199,10 +200,10 @@ static SCM redis_get_file(SCM path) {
 	SCM key, content;
 	int fd, n;
 	if (redis_sock < 0) return SCM_BOOL_F;
-	key = scm_from_locale_string("file-cache");
+	key = scm_from_locale_string(FILE_CACHE);
 	spath = scm_to_locale_string(path);
 	send_header("HEXISTS", 2);
-	send_arg("file-cache");
+	send_arg(FILE_CACHE);
 	send_arg(spath);
 	getrline(cmd);
 	if (atoi(&cmd[1]) == 1) {
@@ -267,7 +268,7 @@ static SCM edit_watch_handler(SCM path, SCM mask) {
 	char *spath;
 	spath = scm_to_locale_string(path);
 	send_header("HDEL", 2);
-	send_arg("file-cache");
+	send_arg(FILE_CACHE);
 	send_arg(spath);
 	getrline(NULL);
 	free(spath);
