@@ -22,24 +22,47 @@ FOO!
 </html>
 ")
 
-(define (plain-text body)
-	(list "200 OK" '(("content-type" . "text/plain")) body)
-	)
-(define (send-html body)
-	(list "200 OK" '(("content-type" . "text/html")) body)
-	)
-(set-handler "/index"
-	(lambda (env)
-		(send-html html)
+(define (simple-response mime-type content)
+	(list "200 OK"
+		(list (cons "content-type" mime-type)
+			(cons "content-length"
+				(number->string (string-length content))))
+		content
 		)
 	)
-(set-handler "/foo"
-	(lambda (env)
-		(send-html foo)
+(define (http-html path responder)
+	(http path
+		(lambda (req)
+			(simple-response "text/html" (responder req))
+			)
 		)
 	)
-(set-handler "/foo/bar"
-	(lambda (env)
-		(send-html "BAR!")
+(define (http-text path responder)
+	(http path
+		(lambda (req)
+			(simple-response "text/plain" (responder req))
+			)
 		)
 	)
+(define (http-json path responder)
+	(http path
+		(lambda (req)
+			(let ((body (json-encode (responder req))))
+				(list "200 OK"
+					(list
+						(cons "content-type" "text/json")
+						(cons "cache-control" "max-age=0, must-revalidate")
+						(cons "content-length" (number->string (string-length body)))
+						)
+					body
+					)
+				)
+			)
+		)
+	)
+
+(http-html "/index"   (lambda (req) html))
+(http-html "/foo"     (lambda (req) foo))
+(http-html "/foo/bar" (lambda (req) "BAR!"))
+(http-text "/text"    (lambda (req) "just some text"))
+(http-json "/json"    (lambda (req) '((foo . "bar") (cat . "horse"))))
