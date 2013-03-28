@@ -17,6 +17,7 @@
 */
 
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/signal.h>
 #include <sys/socket.h>
 #include <sys/select.h>
@@ -42,6 +43,7 @@
 #define makesym(s) (scm_from_locale_symbol(s))
 #define addlist(list,item) (list=scm_cons((item),(list)))
 #define DEFAULT_PORT 8080
+#define BOOT_FILE "boot.scm"
 
 struct handler_entry {
 	char *path;
@@ -52,6 +54,7 @@ struct handler_entry {
 static int running;
 static const char *prompt = "eval> ";
 static struct handler_entry *handlers = NULL;
+static char gusher_root[1024];
 
 static int sorter(const void *a, const void *b) {
 	struct handler_entry **e1, **e2;
@@ -247,10 +250,12 @@ static SCM dispatch(void *data) {
 		n = recv(conn, buf, sizeof(buf), 0);
 		if (n == 0) {
 			fprintf(stderr, "peer closed connection\n");
+			close(conn);
 			return SCM_BOOL_F;
 			}
 		if (n < 0) {
 			fprintf(stderr, "bad recv: %s\n", strerror(errno));
+			close(conn);
 			return SCM_BOOL_F;
 			}
 		mark = buf;
@@ -313,6 +318,8 @@ static SCM err_handler(SCM key, SCM rest) {
 	}
 
 static void init_env(void) {
+	char *here;
+	struct stat bstat;
 	scm_c_define_gsubr("http", 2, 0, 0, set_handler);
 	scm_c_define_gsubr("not-found", 1, 0, 0, default_not_found);
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
@@ -325,6 +332,15 @@ static void init_env(void) {
 	init_template();
 	init_mongodb();
 	init_inotify();
+	here = getcwd(NULL, 0);
+	if (chdir(gusher_root) == 0) {
+		if (stat(BOOT_FILE, &bstat) == 0) {
+			fprintf(stderr, "load %s\n", BOOT_FILE);
+			scm_c_primitive_load(BOOT_FILE);
+			}
+		chdir(here);
+		}
+	free(here);
 	}
 
 static void shutdown_env(void) {
@@ -350,6 +366,7 @@ int main(int argc, char **argv) {
 	http_port = DEFAULT_PORT;
 	threading = 1;
 	background = 0;
+	gusher_root[0] = '\0';
 	while ((opt = getopt(argc, argv, "mdp:")) != -1) {
 		switch (opt) {
 			case 'p':
@@ -373,6 +390,9 @@ int main(int argc, char **argv) {
 	signal(SIGINT, signal_handler);
 	signal(SIGTERM, signal_handler);
 	signal(SIGABRT, signal_handler);
+	if (strlen(gusher_root) == 0) {
+		sprintf(gusher_root, "%s/gusher", LOCALLIB);
+		}
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	optval = 1;
 	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
