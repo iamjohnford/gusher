@@ -37,15 +37,17 @@ static char *upcase(char *src) {
 	return src;
 	}
 
-static SCM fill_template(SCM template, SCM slots) {
+static SCM fill_template(SCM template, SCM partial, SCM slots) {
 	char *master;
-	SCM node, pair, parts;
+	SCM node, pair, parts, slot_mark, slot_end;
 	struct template_slot *table;
 	char *pin, *sense, hold;
 	int marklen, tabsize, i;
 	master = scm_to_locale_string(template);
 	pin = master;
 	parts = SCM_EOL;
+	slot_mark = SCM_EOL;
+	slot_end = SCM_EOL;
 	marklen = strlen(SLOT_MARK);
 	tabsize = scm_to_int(scm_length(slots));
 	table = (struct template_slot *)malloc(
@@ -81,6 +83,15 @@ static SCM fill_template(SCM template, SCM slots) {
 				break;
 				}
 			}
+		if ((i == tabsize) && (partial == SCM_BOOL_T)) {
+			if (slot_mark == SCM_EOL) {
+				slot_mark = c2s(SLOT_MARK);
+				slot_end = c2s(SLOT_END);
+				}
+			parts = scm_cons(slot_mark, parts);
+			parts = scm_cons(c2s(pin), parts);
+			parts = scm_cons(slot_end, parts);
+			}
 		pin = sense + marklen;
 		}
 	free(master);
@@ -93,5 +104,5 @@ static SCM fill_template(SCM template, SCM slots) {
 	}
 
 void init_template(void) {
-	scm_c_define_gsubr("fill-template", 2, 0, 0, fill_template);
+	scm_c_define_gsubr("fill-template", 3, 0, 0, fill_template);
 	}
