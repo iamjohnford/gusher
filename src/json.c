@@ -74,7 +74,6 @@ static json_t *json_build(SCM obj) {
 
 static SCM json_encode(SCM obj) {
 	char *buf;
-	SCM string;
 	int n;
 	json_t *root;
 	root = json_build(obj);
@@ -85,9 +84,7 @@ static SCM json_encode(SCM obj) {
 		fprintf(stderr, "JSON encode failed\n");
 		return SCM_BOOL_F;
 		}
-	string = scm_from_locale_string(buf);
-	free(buf);
-	return string;
+	return scm_take_locale_string(buf);
 	}
 
 void init_json(void) {
