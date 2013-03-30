@@ -29,6 +29,7 @@
 #include <errno.h>
 
 #include "gnotify.h"
+#include "log.h"
 
 #define DEFAULT_REDIS_PORT 6379
 #define FILE_CACHE "file-cache"
@@ -207,7 +208,7 @@ static SCM redis_get_file(SCM path) {
 	send_arg(spath);
 	getrline(cmd);
 	if (atoi(&cmd[1]) == 1) {
-fprintf(stderr, "load %s from cache\n", spath);
+log_msg("load %s from cache\n", spath);
 		free(spath);
 		return redis_hget(key, path);
 		}
@@ -227,7 +228,7 @@ fprintf(stderr, "load %s from cache\n", spath);
 	close(fd);
 	content = scm_take_locale_string(buf);
 	redis_hset(key, path, content);
-fprintf(stderr, "load %s from FS\n", spath);
+log_msg("load %s from FS\n", spath);
 	free(spath);
 	return content;
 	}
