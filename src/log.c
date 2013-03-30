@@ -24,7 +24,8 @@
 static FILE *logfile;
 static char *logpath = NULL;
 
-static void stamp() {
+void log_msg(const char *format, ...) {
+	va_list args;
 	time_t now;
 	struct tm *lt;
 	now = time(NULL);
@@ -32,25 +33,18 @@ static void stamp() {
 	fprintf(logfile, "%d/%02d/%02d %02d:%02d:%02d ",
 		lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday,
 		lt->tm_hour, lt->tm_min, lt->tm_sec);
+	va_start(args, format);
+	vfprintf(logfile, format, args);
+	va_end(args);
 	return;
 	}
 
 SCM log_msg_scm(SCM message) {
 	char *msg;
-	stamp();
 	msg = scm_to_locale_string(message);
-	fprintf(logfile, "%s\n", msg);
+	log_msg("%s\n", msg);
 	free(msg);
 	return SCM_BOOL_T;
-	}
-
-void log_msg(const char *format, ...) {
-	va_list args;
-	stamp();
-	va_start(args, format);
-	vfprintf(logfile, format, args);
-	va_end(args);
-	return;
 	}
 
 static SCM log_to(SCM path) {
