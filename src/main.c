@@ -39,6 +39,7 @@
 #include "template.h"
 #include "mongodb.h"
 #include "gnotify.h"
+#include "log.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
 #define addlist(list,item) (list=scm_cons((item),(list)))
@@ -249,12 +250,12 @@ static SCM dispatch(void *data) {
 	while (!eoh) {
 		n = recv(conn, buf, sizeof(buf), 0);
 		if (n == 0) {
-			fprintf(stderr, "peer closed connection\n");
+			log_msg("peer closed connection\n");
 			close(conn);
 			return SCM_BOOL_F;
 			}
 		if (n < 0) {
-			fprintf(stderr, "bad recv: %s\n", strerror(errno));
+			log_msg("bad recv: %s\n", strerror(errno));
 			close(conn);
 			return SCM_BOOL_F;
 			}
@@ -332,10 +333,11 @@ static void init_env(void) {
 	init_template();
 	init_mongodb();
 	init_inotify();
+	init_log();
 	here = getcwd(NULL, 0);
 	if (chdir(gusher_root) == 0) {
 		if (stat(BOOT_FILE, &bstat) == 0) {
-			fprintf(stderr, "load %s\n", BOOT_FILE);
+			log_msg("load %s\n", BOOT_FILE);
 			scm_c_primitive_load(BOOT_FILE);
 			}
 		chdir(here);
@@ -346,10 +348,11 @@ static void init_env(void) {
 static void shutdown_env(void) {
 	shutdown_mongodb();
 	shutdown_inotify();
+	shutdown_log();
 	}
 
 static void signal_handler(int sig) {
-	fprintf(stderr, "aborted by signal %s\n", strsignal(sig));
+	log_msg("aborted by signal %s\n", strsignal(sig));
 	running = 0;
 	}
 
@@ -379,7 +382,7 @@ int main(int argc, char **argv) {
 				threading = 0;
 				break;
 			default:
-				fprintf(stderr, "invalid option: %c", opt);
+				log_msg("invalid option: %c", opt);
 				exit(1);
 			}
 		}
@@ -402,17 +405,17 @@ int main(int argc, char **argv) {
         server_addr.sin_addr.s_addr = INADDR_ANY; 
         if (bind(sock, (struct sockaddr *)&server_addr,
 			sizeof(struct sockaddr_in)) != 0) {
-		fprintf(stderr, "can't bind: %s\n", strerror(errno));
+		log_msg("can't bind: %s\n", strerror(errno));
 		exit(1);
 		};
         if (listen(sock, 5) != 0) {
-		fprintf(stderr, "can't listen: %s\n", strerror(errno));
+		log_msg("can't listen: %s\n", strerror(errno));
 		exit(1);
 		}
 	scm_init_guile();
 	init_env();
 	while (optind < argc) {
-		fprintf(stderr, "load %s\n", argv[optind]);
+		log_msg("load %s\n", argv[optind]);
 		scm_c_primitive_load(argv[optind]);
 		optind++;
 		}
@@ -466,7 +469,7 @@ fflush(stdout);
 			}
 		if (FD_ISSET(inotify_fd, &fds)) process_inotify_event();
 		}
-	fprintf(stderr, "bye!\n");
+	log_msg("bye!\n");
 	close(sock);
 	shutdown_env();
 	return 0;
