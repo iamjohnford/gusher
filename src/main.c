@@ -73,7 +73,7 @@ static SCM set_handler(SCM path, SCM lambda) {
 	entry = (struct handler_entry *)malloc(
 				sizeof(struct handler_entry));
 	entry->path = scm_to_locale_string(path);
-printf("set handler for %s\n", entry->path);
+	log_msg("set responder for %s\n", entry->path);
 	entry->handler = lambda;
 	entry->link = handlers;
 	handlers = entry;
@@ -229,12 +229,30 @@ static char *scm_buf_string(SCM string, char *buf, int size) {
 	return buf;
 	}
 
+static SCM simple_http_response(SCM mime_type, SCM content) {
+	SCM headers, resp;
+	char *buf, clen[16];
+	headers = SCM_EOL;
+	buf = scm_to_locale_string(content);
+	sprintf(clen, "%ld", strlen(buf));
+	free(buf);
+	addlist(headers, scm_cons(scm_from_locale_string("content-length"),
+						scm_from_locale_string(clen)));
+	addlist(headers, scm_cons(scm_from_locale_string("content-type"),
+						mime_type));
+	resp = SCM_EOL;
+	addlist(resp, content);
+	addlist(resp, headers);
+	addlist(resp, scm_from_locale_string("200 OK"));
+	return resp;
+	}
+
 static SCM dispatch(void *data) {
 	socklen_t size;
 	int sock;
 	char *hname, *hvalue, *body, *status;
 	int conn, reqline, eoh, n;
-	SCM request, reply, handler, headers, pair;
+	SCM request, reply, handler, headers, pair, val;
 	char *mark, *pt, buf[65536], sbuf[256];
 	struct sockaddr_in client;
 	size = sizeof(struct sockaddr_in);
@@ -286,7 +304,17 @@ static SCM dispatch(void *data) {
 		hname = scm_buf_string(SCM_CAR(pair), buf, sizeof(buf));
 		send_all(conn, hname);
 		send_all(conn, ": ");
-		hvalue = scm_buf_string(SCM_CDR(pair), buf, sizeof(buf));
+		val = SCM_CDR(pair);
+		if (scm_is_string(val))
+			hvalue = scm_buf_string(val, buf, sizeof(buf));
+		else if (scm_is_number(val))
+			hvalue = scm_buf_string(scm_number_to_string(val,
+										scm_from_int(10)),
+									buf, sizeof(buf));
+		else if (scm_is_symbol(val))
+			hvalue = scm_buf_string(scm_symbol_to_string(val),
+									buf, sizeof(buf));
+		else strcpy(hvalue = buf, "foobar");
 		send_all(conn, hvalue);
 		send_all(conn, "\r\n");
 		headers = SCM_CDR(headers);
@@ -325,6 +353,7 @@ static void init_env(void) {
 	scm_c_define_gsubr("not-found", 1, 0, 0, default_not_found);
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
 	scm_c_define_gsubr("err-handler", 1, 0, 1, err_handler);
+	scm_c_define_gsubr("simple-response", 2, 0, 0, simple_http_response);
 	scm_c_define("responders", SCM_EOL);
 	init_postgres();
 	init_time();
