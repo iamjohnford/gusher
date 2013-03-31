@@ -40,7 +40,7 @@
 static scm_t_bits make_node_tag;
 
 typedef struct make_node {
-	SCM constructor;
+	SCM callback;
 	SCM payload;
 	SCM ascendants;
 	SCM mutex;
@@ -105,7 +105,7 @@ static char *load_from_file(const char *path) {
 	return buf;
 	}
 
-static SCM fetch_node(SCM smob) {
+static SCM fetch_node(SCM smob, SCM args) {
 	MAKE_NODE * node;
 	char *buf;
 	node = (MAKE_NODE *)SCM_SMOB_DATA(smob);
@@ -125,7 +125,11 @@ static SCM fetch_node(SCM smob) {
 		else node->payload = SCM_BOOL_F;
 		break;
 	case TYPE_CHAIN:
-		node->payload = scm_call_0(node->constructor);
+		if (scm_is_null(args))
+			node->payload = scm_call_0(node->callback);
+		else
+			node->payload = scm_call_1(node->callback,
+						SCM_CAR(args));
 		break;
 		}
 	scm_unlock_mutex(node->mutex);
@@ -137,7 +141,7 @@ static MAKE_NODE *make_node(int type) {
 	MAKE_NODE *node;
 	node = (MAKE_NODE *)scm_gc_malloc(sizeof(MAKE_NODE), "make-node");
 	node->filepath = NULL;
-	node->constructor = SCM_BOOL_F;
+	node->callback = SCM_BOOL_F;
 	node->payload = SCM_BOOL_F;
 	node->ascendants = SCM_EOL;
 	node->mutex = scm_make_mutex();
@@ -186,7 +190,7 @@ static SCM make_node_chain(SCM ingredients, SCM recipe) {
 	SCM obj, cursor, smob;
 	node = make_node(TYPE_CHAIN);
 	node->dirty = 1;
-	node->constructor = recipe;
+	node->callback = recipe;
 	SCM_NEWSMOB(smob, make_node_tag, node);
 	cursor = ingredients;
 	while (cursor != SCM_EOL) {
@@ -209,7 +213,7 @@ static size_t free_node(SCM smob) {
 static SCM mark_node(SCM smob) {
 	MAKE_NODE *node;
 	node = (MAKE_NODE *)SCM_SMOB_DATA(smob);
-	scm_gc_mark(node->constructor);
+	scm_gc_mark(node->callback);
 	scm_gc_mark(node->payload);
 	scm_gc_mark(node->ascendants);
 	scm_gc_mark(node->mutex);
@@ -471,7 +475,7 @@ void init_cache(void) {
 	scm_c_define_gsubr("cache-file", 1, 0, 0, make_node_file);
 	scm_c_define_gsubr("cache-chain", 2, 0, 0, make_node_chain);
 	scm_c_define_gsubr("cache-update", 1, 0, 1, touch_node);
-	scm_c_define_gsubr("cache-fetch", 1, 0, 0, fetch_node);
+	scm_c_define_gsubr("cache-fetch", 1, 0, 1, fetch_node);
 	scm_c_define_gsubr("cache-set", 2, 0, 0, redis_set);
 	scm_c_define_gsubr("cache-hset", 3, 0, 0, redis_hset);
 	scm_c_define_gsubr("cache-append", 2, 0, 0, redis_append);
