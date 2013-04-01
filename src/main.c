@@ -232,16 +232,36 @@ static char *scm_buf_string(SCM string, char *buf, int size) {
 static SCM simple_http_response(SCM mime_type, SCM content) {
 	SCM headers, resp;
 	char *buf, clen[16];
-	headers = SCM_EOL;
 	buf = scm_to_locale_string(content);
 	sprintf(clen, "%ld", strlen(buf));
 	free(buf);
+	headers = SCM_EOL;
 	addlist(headers, scm_cons(scm_from_locale_string("content-length"),
 						scm_from_locale_string(clen)));
 	addlist(headers, scm_cons(scm_from_locale_string("content-type"),
 						mime_type));
 	resp = SCM_EOL;
 	addlist(resp, content);
+	addlist(resp, headers);
+	addlist(resp, scm_from_locale_string("200 OK"));
+	return resp;
+	}
+
+static SCM json_http_response(SCM enc_content) {
+	SCM headers, resp;
+	char *buf, clen[16];
+	buf = scm_to_locale_string(enc_content);
+	sprintf(clen, "%ld", strlen(buf));
+	free(buf);
+	headers = SCM_EOL;
+	addlist(headers, scm_cons(scm_from_locale_string("content-length"),
+						scm_from_locale_string(clen)));
+	addlist(headers, scm_cons(scm_from_locale_string("cache-control"),
+					scm_from_locale_string("max-age=0, must-revalidate")));
+	addlist(headers, scm_cons(scm_from_locale_string("content-type"),
+						scm_from_locale_string("text/json")));
+	resp = SCM_EOL;
+	addlist(resp, enc_content);
 	addlist(resp, headers);
 	addlist(resp, scm_from_locale_string("200 OK"));
 	return resp;
@@ -354,6 +374,7 @@ static void init_env(void) {
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
 	scm_c_define_gsubr("err-handler", 1, 0, 1, err_handler);
 	scm_c_define_gsubr("simple-response", 2, 0, 0, simple_http_response);
+	scm_c_define_gsubr("json-response", 1, 0, 0, json_http_response);
 	scm_c_define("responders", SCM_EOL);
 	init_postgres();
 	init_time();
