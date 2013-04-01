@@ -21,6 +21,8 @@
 #include <libguile.h>
 #include <stdio.h>
 
+#include "log.h"
+
 static char *make_key(SCM obj) {
 	SCM string;
 	if (scm_is_string(obj)) string = obj;
@@ -81,7 +83,7 @@ static SCM json_encode(SCM obj) {
 	if ((n = root->refcount) > 0)
 		while (n--) json_decref(root);
 	if (buf == NULL) {
-		fprintf(stderr, "JSON encode failed\n");
+		log_msg("JSON encode failed\n");
 		return SCM_BOOL_F;
 		}
 	return scm_take_locale_string(buf);

@@ -39,6 +39,7 @@
 #include "template.h"
 //#include "mongodb.h"
 #include "gnotify.h"
+#include "log.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
 #define addlist(list,item) (list=scm_cons((item),(list)))
@@ -72,7 +73,7 @@ static SCM set_handler(SCM path, SCM lambda) {
 	entry = (struct handler_entry *)malloc(
 				sizeof(struct handler_entry));
 	entry->path = scm_to_locale_string(path);
-printf("set handler for %s\n", entry->path);
+	log_msg("set responder for %s\n", entry->path);
 	entry->handler = lambda;
 	entry->link = handlers;
 	handlers = entry;
@@ -228,12 +229,50 @@ static char *scm_buf_string(SCM string, char *buf, int size) {
 	return buf;
 	}
 
+static SCM simple_http_response(SCM mime_type, SCM content) {
+	SCM headers, resp;
+	char *buf, clen[16];
+	buf = scm_to_locale_string(content);
+	sprintf(clen, "%ld", strlen(buf));
+	free(buf);
+	headers = SCM_EOL;
+	addlist(headers, scm_cons(scm_from_locale_string("content-length"),
+						scm_from_locale_string(clen)));
+	addlist(headers, scm_cons(scm_from_locale_string("content-type"),
+						mime_type));
+	resp = SCM_EOL;
+	addlist(resp, content);
+	addlist(resp, headers);
+	addlist(resp, scm_from_locale_string("200 OK"));
+	return resp;
+	}
+
+static SCM json_http_response(SCM enc_content) {
+	SCM headers, resp;
+	char *buf, clen[16];
+	buf = scm_to_locale_string(enc_content);
+	sprintf(clen, "%ld", strlen(buf));
+	free(buf);
+	headers = SCM_EOL;
+	addlist(headers, scm_cons(scm_from_locale_string("content-length"),
+						scm_from_locale_string(clen)));
+	addlist(headers, scm_cons(scm_from_locale_string("cache-control"),
+					scm_from_locale_string("max-age=0, must-revalidate")));
+	addlist(headers, scm_cons(scm_from_locale_string("content-type"),
+						scm_from_locale_string("text/json")));
+	resp = SCM_EOL;
+	addlist(resp, enc_content);
+	addlist(resp, headers);
+	addlist(resp, scm_from_locale_string("200 OK"));
+	return resp;
+	}
+
 static SCM dispatch(void *data) {
 	socklen_t size;
 	int sock;
 	char *hname, *hvalue, *body, *status;
 	int conn, reqline, eoh, n;
-	SCM request, reply, handler, headers, pair;
+	SCM request, reply, handler, headers, pair, val;
 	char *mark, *pt, buf[65536], sbuf[256];
 	struct sockaddr_in client;
 	size = sizeof(struct sockaddr_in);
@@ -249,12 +288,12 @@ static SCM dispatch(void *data) {
 	while (!eoh) {
 		n = recv(conn, buf, sizeof(buf), 0);
 		if (n == 0) {
-			fprintf(stderr, "peer closed connection\n");
+			log_msg("peer closed connection\n");
 			close(conn);
 			return SCM_BOOL_F;
 			}
 		if (n < 0) {
-			fprintf(stderr, "bad recv: %s\n", strerror(errno));
+			log_msg("bad recv: %s\n", strerror(errno));
 			close(conn);
 			return SCM_BOOL_F;
 			}
@@ -285,7 +324,17 @@ static SCM dispatch(void *data) {
 		hname = scm_buf_string(SCM_CAR(pair), buf, sizeof(buf));
 		send_all(conn, hname);
 		send_all(conn, ": ");
-		hvalue = scm_buf_string(SCM_CDR(pair), buf, sizeof(buf));
+		val = SCM_CDR(pair);
+		if (scm_is_string(val))
+			hvalue = scm_buf_string(val, buf, sizeof(buf));
+		else if (scm_is_number(val))
+			hvalue = scm_buf_string(scm_number_to_string(val,
+										scm_from_int(10)),
+									buf, sizeof(buf));
+		else if (scm_is_symbol(val))
+			hvalue = scm_buf_string(scm_symbol_to_string(val),
+									buf, sizeof(buf));
+		else strcpy(hvalue = buf, "foobar");
 		send_all(conn, hvalue);
 		send_all(conn, "\r\n");
 		headers = SCM_CDR(headers);
@@ -324,6 +373,8 @@ static void init_env(void) {
 	scm_c_define_gsubr("not-found", 1, 0, 0, default_not_found);
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
 	scm_c_define_gsubr("err-handler", 1, 0, 1, err_handler);
+	scm_c_define_gsubr("simple-response", 2, 0, 0, simple_http_response);
+	scm_c_define_gsubr("json-response", 1, 0, 0, json_http_response);
 	scm_c_define("responders", SCM_EOL);
 	init_postgres();
 	init_time();
@@ -332,10 +383,11 @@ static void init_env(void) {
 	init_template();
 	//init_mongodb();
 	init_inotify();
+	init_log();
 	here = getcwd(NULL, 0);
 	if (chdir(gusher_root) == 0) {
 		if (stat(BOOT_FILE, &bstat) == 0) {
-			fprintf(stderr, "load %s\n", BOOT_FILE);
+			log_msg("load %s\n", BOOT_FILE);
 			scm_c_primitive_load(BOOT_FILE);
 			}
 		chdir(here);
@@ -346,10 +398,11 @@ static void init_env(void) {
 static void shutdown_env(void) {
 	//shutdown_mongodb();
 	shutdown_inotify();
+	shutdown_log();
 	}
 
 static void signal_handler(int sig) {
-	fprintf(stderr, "aborted by signal %s\n", strsignal(sig));
+	log_msg("aborted by signal %s\n", strsignal(sig));
 	running = 0;
 	}
 
@@ -379,7 +432,7 @@ int main(int argc, char **argv) {
 				threading = 0;
 				break;
 			default:
-				fprintf(stderr, "invalid option: %c", opt);
+				log_msg("invalid option: %c", opt);
 				exit(1);
 			}
 		}
@@ -402,17 +455,17 @@ int main(int argc, char **argv) {
         server_addr.sin_addr.s_addr = INADDR_ANY; 
         if (bind(sock, (struct sockaddr *)&server_addr,
 			sizeof(struct sockaddr_in)) != 0) {
-		fprintf(stderr, "can't bind: %s\n", strerror(errno));
+		log_msg("can't bind: %s\n", strerror(errno));
 		exit(1);
 		};
         if (listen(sock, 5) != 0) {
-		fprintf(stderr, "can't listen: %s\n", strerror(errno));
+		log_msg("can't listen: %s\n", strerror(errno));
 		exit(1);
 		}
 	scm_init_guile();
 	init_env();
 	while (optind < argc) {
-		fprintf(stderr, "load %s\n", argv[optind]);
+		log_msg("load %s\n", argv[optind]);
 		scm_c_primitive_load(argv[optind]);
 		optind++;
 		}
@@ -466,7 +519,7 @@ fflush(stdout);
 			}
 		if (FD_ISSET(inotify_fd, &fds)) process_inotify_event();
 		}
-	fprintf(stderr, "bye!\n");
+	log_msg("bye!\n");
 	close(sock);
 	shutdown_env();
 	return 0;

@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "gtime.h"
+#include "log.h"
 
 #define c2s(a) (scm_from_locale_string(a))
 
@@ -50,7 +51,7 @@ static SCM pg_open(SCM conninfo) {
 	pgc->conn = PQconnectdb(conninfo_s);
 	free(conninfo_s);
 	if (PQstatus(pgc->conn) != CONNECTION_OK) {
-		fprintf(stderr, "PQ connection failed: %s\n",
+		log_msg("PQ connection failed: %s\n",
 				PQerrorMessage(pgc->conn));
 		PQfinish(pgc->conn);
 		pgc->conn = NULL;

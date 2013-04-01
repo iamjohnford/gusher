@@ -65,7 +65,7 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(lib1dir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_gusher_OBJECTS = main.$(OBJEXT) postgres.$(OBJEXT) gtime.$(OBJEXT) \
 	cache.$(OBJEXT) json.$(OBJEXT) template.$(OBJEXT) \
-	gnotify.$(OBJEXT)
+	mongodb.$(OBJEXT) gnotify.$(OBJEXT) log.$(OBJEXT)
 gusher_OBJECTS = $(am_gusher_OBJECTS)
 gusher_LDADD = $(LDADD)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
@@ -238,7 +238,11 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+<<<<<<< HEAD
 gusher_SOURCES = main.c postgres.c gtime.c cache.c json.c template.c gnotify.c
+=======
+gusher_SOURCES = main.c postgres.c gtime.c cache.c json.c template.c mongodb.c gnotify.c log.c
+>>>>>>> cd343da49733a62cdf30a950410b0eb20f303d05
 lib1dir = $(libdir)/gusher
 lib1_SCRIPTS = boot.scm
 AM_CFLAGS = -Wall -DLOCALLIB=\"$(libdir)\"
@@ -367,6 +371,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gnotify.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gtime.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/json.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/log.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/postgres.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/template.Po@am__quote@
