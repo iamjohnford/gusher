@@ -37,7 +37,7 @@
 #include "cache.h"
 #include "json.h"
 #include "template.h"
-#include "mongodb.h"
+//#include "mongodb.h"
 #include "gnotify.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
@@ -330,7 +330,7 @@ static void init_env(void) {
 	init_cache();
 	init_json();
 	init_template();
-	init_mongodb();
+	//init_mongodb();
 	init_inotify();
 	here = getcwd(NULL, 0);
 	if (chdir(gusher_root) == 0) {
@@ -344,7 +344,7 @@ static void init_env(void) {
 	}
 
 static void shutdown_env(void) {
-	shutdown_mongodb();
+	//shutdown_mongodb();
 	shutdown_inotify();
 	}
 
