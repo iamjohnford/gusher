@@ -21,6 +21,7 @@
 #include <sys/signal.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdio.h>
@@ -37,7 +38,6 @@
 #include "cache.h"
 #include "json.h"
 #include "template.h"
-//#include "mongodb.h"
 #include "gnotify.h"
 #include "log.h"
 #include "http.h"
@@ -382,7 +382,6 @@ static void init_env(void) {
 	init_cache();
 	init_json();
 	init_template();
-	//init_mongodb();
 	init_inotify();
 	init_log();
 	init_http();
@@ -398,7 +397,6 @@ static void init_env(void) {
 	}
 
 static void shutdown_env(void) {
-	//shutdown_mongodb();
 	shutdown_inotify();
 	shutdown_http();
 	shutdown_log();
@@ -411,6 +409,7 @@ static void signal_handler(int sig) {
 
 int main(int argc, char **argv) {
 	fd_set fds;
+	struct timeval timeout;
 	char buf[1024], lambda[1024];
 	int opt, n, sock, optval;
 	int hisock, fdin;
@@ -483,12 +482,15 @@ int main(int argc, char **argv) {
 	newline = scm_c_eval_string("newline");
 	handler = scm_c_eval_string("err-handler");
 	running = 1;
-        while(running) {  
+	while (running) {  
 		FD_ZERO(&fds);
 		FD_SET(sock, &fds);
 		FD_SET(inotify_fd, &fds);
 		if (!background) FD_SET(fdin, &fds);
-		select(hisock + 1, &fds, NULL, NULL, NULL);
+		timeout.tv_sec = 3;
+		timeout.tv_usec = 0;
+		select(hisock + 1, &fds, NULL, NULL, &timeout);
+		if (running == 0) break; // why?
 		if (FD_ISSET(fdin, &fds)) {
 			n = read(fdin, buf, 1024);
 			if (n == 0) break;
