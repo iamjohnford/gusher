@@ -99,19 +99,30 @@ static size_t header_handler(void *data, size_t size, size_t n,
 	while (isspace(*pt)) pt++;
 	sym = scm_from_locale_symbol(downcase(buf));
 	value = pt;
-	pt = index(value, '\r');
-	if (pt == NULL) pt = index(value, '\n');
-	*pt = '\0';
+	pt = value + strlen(value) - 1;
+	while (isspace(*pt)) {
+		*pt = '\0';
+		if (pt == value) break;
+		pt--;
+		}
 	val = scm_from_locale_string(value);
 	*((SCM *)userp) = scm_acons(sym, val, *((SCM *)userp));
 	return rsize;
 	}
 
 static SCM process_body(SCM headers, SCM body) {
-	char *ctype;
-	ctype = scm_to_locale_string(scm_assq_ref(headers, content_type));
-	if (strcmp(ctype, "text/json") == 0) body = json_decode(body);
-	free(ctype);
+	char *stype;
+	SCM ctype;
+	ctype = scm_assq_ref(headers, content_type);
+	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
+	stype = scm_to_locale_string(ctype);
+	if (strcmp(stype, "text/json") == 0)
+		body = json_decode(body);
+	else if (strcmp(stype, "application/json") == 0)
+		body = json_decode(body);
+	else if (strcmp(stype, "application/javascript") == 0)
+		body = json_decode(body);
+	free(stype);
 	scm_remember_upto_here_1(body);
 	return body;
 	}
