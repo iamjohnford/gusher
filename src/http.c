@@ -276,6 +276,7 @@ static SCM http_get(SCM url) {
 void init_http() {
 	curl_global_init(CURL_GLOBAL_ALL);
 	mutex = scm_make_mutex();
+	scm_c_define("http-mutex", mutex);
 	scm_c_define_gsubr("http-get", 1, 0, 0, http_get);
 	}
 
