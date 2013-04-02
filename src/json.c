@@ -122,7 +122,7 @@ static SCM parse(json_t *obj) {
 	return SCM_BOOL_F;
 	}
 
-static SCM json_decode(SCM string) {
+SCM json_decode(SCM string) {
 	char *buf;
 	json_t *root;
 	json_error_t err;
