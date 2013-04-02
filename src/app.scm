@@ -1,3 +1,5 @@
+#! /usr/local/bin/gusher -d
+!#
 
 (define html "
 <html>
