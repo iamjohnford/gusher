@@ -241,7 +241,7 @@ top_srcdir = @top_srcdir@
 gusher_SOURCES = main.c postgres.c gtime.c cache.c json.c template.c gnotify.c log.c http.c
 lib1dir = $(libdir)/gusher
 lib1_SCRIPTS = boot.scm
-AM_CFLAGS = -Wall -DLOCALLIB=\"$(libdir)\"
+AM_CFLAGS = -Wall -I/usr/include/libxml2 -DLOCALLIB=\"$(libdir)\"
 all: all-am
 
 .SUFFIXES:

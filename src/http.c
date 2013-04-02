@@ -21,9 +21,13 @@
 #include <libguile.h>
 #include <ctype.h>
 #include <string.h>
+#include <libxml2/libxml/parser.h>
 
 #include "json.h"
 #include "log.h"
+
+#define match(a,b) (strcmp(a,b) == 0)
+#define symbol(s) (scm_from_locale_symbol(s))
 
 typedef struct hnode {
 	CURL *handle;
@@ -31,15 +35,19 @@ typedef struct hnode {
 	char domain[];
 	} HNODE;
 
+typedef struct cnode {
+	struct cnode *next;
+	char *content;
+	size_t size;
+	} CNODE;
+
 static HNODE *hpool = NULL;
 static SCM mutex;
-static SCM content_type;
-static SCM infix_grammar;
 
 static HNODE *new_handle() {
 	HNODE *node;
 	node = (HNODE *)malloc(sizeof(HNODE));
-fprintf(stderr, "MAKE %08x\n", node);
+fprintf(stderr, "MAKE %08lx\n", (unsigned long)node);
 	node->handle = curl_easy_init();
 	node->next = NULL;
 	return node;
@@ -54,7 +62,7 @@ static HNODE *get_handle() {
 		return node;
 		}
 	node = hpool;
-fprintf(stderr, "REUSE %08x\n", node);
+fprintf(stderr, "REUSE %08lx\n", (unsigned long)node);
 	hpool = node->next;
 	node->next = NULL;
 	scm_unlock_mutex(mutex);
@@ -63,7 +71,7 @@ fprintf(stderr, "REUSE %08x\n", node);
 
 static void release_handle(HNODE *node) {
 	scm_lock_mutex(mutex);
-fprintf(stderr, "RELEASE %08x\n", node);
+fprintf(stderr, "RELEASE %08lx\n", (unsigned long)node);
 	node->next = hpool;
 	hpool = node;
 	scm_unlock_mutex(mutex);
@@ -73,10 +81,14 @@ fprintf(stderr, "RELEASE %08x\n", node);
 static size_t write_handler(void *buffer, size_t size,
 							size_t n, void *userp) {
 	size_t rsize;
-	SCM string;
+	CNODE *node;
 	rsize = size * n;
-	string = scm_from_locale_stringn((char *)buffer, rsize);
-	*((SCM *)userp) = scm_cons(string, *((SCM *)userp));
+	node = (CNODE *)malloc(sizeof(CNODE));
+	node->content = (char *)malloc(rsize);
+	memcpy(node->content, buffer, rsize);
+	node->size = rsize;
+	node->next = *((CNODE **)userp);
+	*((CNODE **)userp) = node;
 	return rsize;
 	}
 
@@ -97,7 +109,7 @@ static size_t header_handler(void *data, size_t size, size_t n,
 	if ((pt = index(buf, ':')) == NULL) return rsize;
 	*pt++ = '\0';
 	while (isspace(*pt)) pt++;
-	sym = scm_from_locale_symbol(downcase(buf));
+	sym = symbol(downcase(buf));
 	value = pt;
 	pt = value + strlen(value) - 1;
 	while (isspace(*pt)) {
@@ -107,23 +119,102 @@ static size_t header_handler(void *data, size_t size, size_t n,
 		}
 	val = scm_from_locale_string(value);
 	*((SCM *)userp) = scm_acons(sym, val, *((SCM *)userp));
+	scm_remember_upto_here_2(sym, val);
 	return rsize;
+	}
+
+static SCM join_strings(SCM list, int trim) {
+	SCM joined;
+	char *buf, *pt;
+	int trimmed;
+	joined = scm_string_join(list,
+				scm_from_locale_string(""),
+				symbol("infix"));
+	if (!trim) return joined;
+	trimmed = 0;
+	buf = scm_to_locale_string(joined);
+	pt = buf + strlen(buf) - 1;
+	while (isspace(*pt)) {
+		*pt-- = '\0';
+		trimmed = 1;
+		}
+	for (pt = buf; *pt && isspace(*pt); pt++) trimmed = 1;
+	if (trimmed) {
+		joined = scm_from_locale_string(pt);
+		free(buf);
+		}
+	else joined = scm_take_locale_string(buf);
+	return joined;
+	}
+
+static SCM walk_tree(xmlNode *node, int level) {
+	xmlNode *knode;
+	const char *name;
+	SCM snode, kids, text;
+	snode = SCM_EOL;
+	text = SCM_EOL;
+	if (node->name != NULL) name = (const char *)node->name;
+	else name = "no-name";
+	snode = scm_acons(symbol("name"),
+			scm_from_locale_string(name),
+			snode);
+	if (node->children != NULL) {
+		kids = SCM_EOL;
+		for (knode = node->children; knode; knode = knode->next) {
+			if (knode->type == XML_ELEMENT_NODE)
+				kids = scm_cons(walk_tree(knode, level + 1), kids);
+			else if ((knode->type == XML_TEXT_NODE) ||
+						(knode->type == XML_CDATA_SECTION_NODE))
+				text = scm_cons(scm_from_locale_string((const char *)knode->content), text);
+			}
+		if (!scm_is_null(kids)) {
+			snode = scm_acons(symbol("kids"),
+					scm_reverse(kids), snode);
+			}
+		}
+	if (!scm_is_null(text)) {
+		snode = scm_acons(symbol("content"),
+				join_strings(scm_reverse(text), 1),
+				snode);
+		}
+	return snode;
+	}
+
+static SCM parse_xml(SCM doc) {
+	char *buf;
+	SCM tree;
+	xmlDoc *xmldoc;
+	xmlNode *root;
+	buf = scm_to_locale_string(doc);
+	xmldoc = xmlReadMemory(buf, strlen(buf), NULL, NULL, 0);
+	root = xmlDocGetRootElement(xmldoc);
+	tree = walk_tree(root, 0);
+	xmlFreeDoc(xmldoc);
+	xmlCleanupParser();
+	free(buf);
+	scm_remember_upto_here_1(doc);
+	return tree;
+	}
+
+inline int matchn(const char *val, const char *mime) {
+	return strncmp(val, mime, strlen(mime)) == 0;
 	}
 
 static SCM process_body(SCM headers, SCM body) {
 	char *stype;
 	SCM ctype;
-	ctype = scm_assq_ref(headers, content_type);
+	ctype = scm_assq_ref(headers, symbol("content-type"));
 	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
 	stype = scm_to_locale_string(ctype);
-	if (strcmp(stype, "text/json") == 0)
+	if (match(stype, "text/json") ||
+			match(stype, "application/json") ||
+			match(stype, "application/javascript"))
 		body = json_decode(body);
-	else if (strcmp(stype, "application/json") == 0)
-		body = json_decode(body);
-	else if (strcmp(stype, "application/javascript") == 0)
-		body = json_decode(body);
+	else if (matchn(stype, "application/xml") ||
+			match(stype, "text/xml"))
+		body = parse_xml(body);
 	free(stype);
-	scm_remember_upto_here_1(body);
+	scm_remember_upto_here_2(body, headers);
 	return body;
 	}
 
@@ -132,10 +223,11 @@ static SCM http_get(SCM url) {
 	CURL *handle;
 	char *surl, errbuf[CURL_ERROR_SIZE];
 	CURLcode res;
-	SCM chunks, glue, body, headers, reply;
+	CNODE *chunks, *next;
+	SCM body, headers, reply, chunk;
 	hnode = get_handle();
 	handle = hnode->handle;
-	chunks = SCM_EOL;
+	chunks = NULL;
 	headers = SCM_EOL;
 	surl = scm_to_locale_string(url);
 	curl_easy_setopt(handle, CURLOPT_URL, surl);
@@ -152,20 +244,25 @@ static SCM http_get(SCM url) {
 	release_handle(hnode);
 	if (res != 0) {
 		log_msg("http-get error: %s\n", errbuf);
-		return SCM_BOOL_F;
+		//return SCM_BOOL_F;
 		}
-	glue = scm_from_locale_string("");
-	body = scm_string_join(scm_reverse(chunks), glue, infix_grammar);
+	body = SCM_EOL;
+	while (chunks != NULL) {
+		next = chunks->next;
+		chunk = scm_take_locale_stringn(chunks->content, chunks->size);
+		body = scm_cons(chunk, body);
+		free(chunks);
+		chunks = next;
+		}
+	body = join_strings(body, 0);
 	reply = scm_cons(headers, process_body(headers, body));
-	scm_remember_upto_here_2(chunks, headers);
+	scm_remember_upto_here_1(headers);
 	scm_remember_upto_here_2(body, reply);
 	return reply;
 	}
 
 void init_http() {
 	curl_global_init(CURL_GLOBAL_ALL);
-	content_type = scm_from_locale_symbol("content-type");
-	infix_grammar = scm_from_locale_symbol("infix");
 	mutex = scm_make_mutex();
 	scm_c_define_gsubr("http-get", 1, 0, 0, http_get);
 	}
@@ -173,7 +270,7 @@ void init_http() {
 void shutdown_http() {
 	HNODE *next;
 	while (hpool != NULL) {
-fprintf(stderr, "FREE %08x\n", hpool);
+fprintf(stderr, "FREE %08lx\n", (unsigned long)hpool);
 		next = hpool->next;
 		curl_easy_cleanup(hpool->handle);
 		free(hpool);
