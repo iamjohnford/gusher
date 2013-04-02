@@ -20,6 +20,48 @@
 #include <curl/easy.h>
 #include <libguile.h>
 
+typedef struct hnode {
+	CURL *handle;
+	struct hnode *next;
+	} HNODE;
+
+static HNODE *hpool = NULL;
+static SCM mutex;
+
+static HNODE *new_handle() {
+	HNODE *node;
+	node = (HNODE *)malloc(sizeof(HNODE));
+fprintf(stderr, "MAKE %08x\n", node);
+	node->handle = curl_easy_init();
+	node->next = NULL;
+	return node;
+	}
+
+static HNODE *get_handle() {
+	HNODE *node;
+	scm_lock_mutex(mutex);
+	if (hpool == NULL) {
+		node = new_handle();
+		scm_unlock_mutex(mutex);
+		return node;
+		}
+	node = hpool;
+fprintf(stderr, "REUSE %08x\n", node);
+	hpool = node->next;
+	node->next = NULL;
+	scm_unlock_mutex(mutex);
+	return node;
+	}
+
+static void release_handle(HNODE *node) {
+	scm_lock_mutex(mutex);
+fprintf(stderr, "RELEASE %08x\n", node);
+	node->next = hpool;
+	hpool = node;
+	scm_unlock_mutex(mutex);
+	return;
+	}
+
 static size_t write_handler(void *buffer, size_t size,
 							size_t n, void *userp) {
 	size_t rsize;
@@ -31,11 +73,13 @@ static size_t write_handler(void *buffer, size_t size,
 	}
 
 static SCM http_get(SCM url) {
+	HNODE *hnode;
 	CURL *handle;
 	char *surl;
 	CURLcode res;
 	SCM chunks, glue, grammar;
-	handle = curl_easy_init();
+	hnode = get_handle();
+	handle = hnode->handle;
 	chunks = SCM_EOL;
 	surl = scm_to_locale_string(url);
 	curl_easy_setopt(handle, CURLOPT_URL, surl);
@@ -47,7 +91,7 @@ static SCM http_get(SCM url) {
 	res = curl_easy_perform(handle);
 	free(surl);
 	fprintf(stderr, "res: %d\n", res);
-	curl_easy_cleanup(handle);
+	release_handle(hnode);
 	glue = scm_from_locale_string("");
 	grammar = scm_from_locale_symbol("infix");
 	return scm_string_join(chunks, glue, grammar);
@@ -55,10 +99,19 @@ static SCM http_get(SCM url) {
 
 void init_http() {
 	curl_global_init(CURL_GLOBAL_ALL);
+	mutex = scm_make_mutex();
 	scm_c_define_gsubr("http-get", 1, 0, 0, http_get);
 	}
 
 void shutdown_http() {
+	HNODE *next;
+	while (hpool != NULL) {
+fprintf(stderr, "FREE %08x\n", hpool);
+		next = hpool->next;
+		curl_easy_cleanup(hpool->handle);
+		free(hpool);
+		hpool = next;
+		}
 	curl_global_cleanup();
 	}
 
