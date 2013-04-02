@@ -149,15 +149,25 @@ static SCM join_strings(SCM list, int trim) {
 
 static SCM walk_tree(xmlNode *node, int level) {
 	xmlNode *knode;
+	xmlAttr *attr;
 	const char *name;
-	SCM snode, kids, text;
+	SCM snode, kids, text, attribs, joined;
 	snode = SCM_EOL;
 	text = SCM_EOL;
+	attribs = SCM_EOL;
 	if (node->name != NULL) name = (const char *)node->name;
 	else name = "no-name";
 	snode = scm_acons(symbol("name"),
 			scm_from_locale_string(name),
 			snode);
+	if (node->properties != NULL) {
+		for (attr = node->properties; attr; attr = attr->next) {
+			attribs = scm_acons(symbol((const char *)attr->name),
+					scm_from_locale_string((const char *)attr->children->content),
+					attribs);
+			}
+		snode = scm_acons(symbol("attrs"), attribs, snode);
+		}
 	if (node->children != NULL) {
 		kids = SCM_EOL;
 		for (knode = node->children; knode; knode = knode->next) {
@@ -166,6 +176,8 @@ static SCM walk_tree(xmlNode *node, int level) {
 			else if ((knode->type == XML_TEXT_NODE) ||
 						(knode->type == XML_CDATA_SECTION_NODE))
 				text = scm_cons(scm_from_locale_string((const char *)knode->content), text);
+			else
+				fprintf(stderr, "NODE TYPE %d\n", knode->type);
 			}
 		if (!scm_is_null(kids)) {
 			snode = scm_acons(symbol("kids"),
@@ -173,9 +185,9 @@ static SCM walk_tree(xmlNode *node, int level) {
 			}
 		}
 	if (!scm_is_null(text)) {
-		snode = scm_acons(symbol("content"),
-				join_strings(scm_reverse(text), 1),
-				snode);
+		joined = join_strings(scm_reverse(text), 1);
+		if (scm_c_string_length(joined) > 0)
+			snode = scm_acons(symbol("content"), joined, snode);
 		}
 	return snode;
 	}
