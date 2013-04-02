@@ -19,6 +19,7 @@ AC_CHECK_LIB([jansson], [json_string])
 AC_CHECK_LIB([uuid], [uuid_generate])
 AC_CHECK_LIB([m], [floor])
 AC_CHECK_LIB([mongoc], [mongo_init])
+AC_CHECK_LIB([curl], [curl_global_init])
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])

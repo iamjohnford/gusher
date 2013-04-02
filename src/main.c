@@ -40,6 +40,7 @@
 #include "mongodb.h"
 #include "gnotify.h"
 #include "log.h"
+#include "http.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
 #define addlist(list,item) (list=scm_cons((item),(list)))
@@ -384,6 +385,7 @@ static void init_env(void) {
 	init_mongodb();
 	init_inotify();
 	init_log();
+	init_http();
 	here = getcwd(NULL, 0);
 	if (chdir(gusher_root) == 0) {
 		if (stat(BOOT_FILE, &bstat) == 0) {
@@ -398,6 +400,7 @@ static void init_env(void) {
 static void shutdown_env(void) {
 	shutdown_mongodb();
 	shutdown_inotify();
+	shutdown_http();
 	shutdown_log();
 	}
 
