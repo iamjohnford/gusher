@@ -16,7 +16,5 @@
 ** Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
-#include <libguile.h>
-
-void init_json(void);
-SCM json_decode(SCM);
+void init_http(void);
+void shutdown_http(void);

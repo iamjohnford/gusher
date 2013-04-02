@@ -89,6 +89,51 @@ static SCM json_encode(SCM obj) {
 	return scm_take_locale_string(buf);
 	}
 
+static SCM parse(json_t *obj) {
+	size_t n, i;
+	const char *key;
+	json_t *val;
+	SCM list, sym;
+	if (json_is_string(obj))
+		return scm_from_locale_string(json_string_value(obj));
+	if (json_is_integer(obj))
+		return scm_from_int((int)json_integer_value(obj));
+	if (json_is_real(obj))
+		return scm_from_double(json_real_value(obj));
+	if (json_is_true(obj)) return SCM_BOOL_T;
+	if (json_is_false(obj)) return SCM_BOOL_F;
+	if (json_is_null(obj)) return SCM_EOL;
+	if (json_is_array(obj)) {
+		list = SCM_EOL;
+		n = json_array_size(obj);
+		for (i = 0; i < n; i++) {
+			list = scm_cons(parse(json_array_get(obj, i)), list);
+			}
+		return list;
+		}
+	if (json_is_object(obj)) {
+		list = SCM_EOL;
+		json_object_foreach(obj, key, val) {
+			sym = scm_from_locale_symbol(key);
+			list = scm_acons(sym, parse(val), list);
+			}
+		return list;
+		}
+	return SCM_BOOL_F;
+	}
+
+SCM json_decode(SCM string) {
+	char *buf;
+	json_t *root;
+	json_error_t err;
+	buf = scm_to_locale_string(string);
+	root = json_loads(buf, 0, &err);
+	free(buf);
+	if (root == NULL) return SCM_BOOL_F;
+	return parse(root);
+	}
+
 void init_json(void) {
 	scm_c_define_gsubr("json-encode", 1, 0, 0, json_encode);
+	scm_c_define_gsubr("json-decode", 1, 0, 0, json_decode);
 	}
