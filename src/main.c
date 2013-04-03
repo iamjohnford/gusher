@@ -457,11 +457,11 @@ int main(int argc, char **argv) {
         server_addr.sin_addr.s_addr = INADDR_ANY; 
         if (bind(sock, (struct sockaddr *)&server_addr,
 			sizeof(struct sockaddr_in)) != 0) {
-		log_msg("can't bind: %s\n", strerror(errno));
+		fprintf(stderr, "can't bind: %s\n", strerror(errno));
 		exit(1);
 		};
         if (listen(sock, 5) != 0) {
-		log_msg("can't listen: %s\n", strerror(errno));
+		fprintf(stderr, "can't listen: %s\n", strerror(errno));
 		exit(1);
 		}
 	scm_init_guile();
