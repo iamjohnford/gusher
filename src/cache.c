@@ -51,6 +51,8 @@ typedef struct make_node {
 
 static int redis_sock = -1;
 static int redis_port;
+static SCM file_sym;
+static SCM data_sym;
 
 static void invalidate(MAKE_NODE *node) {
 	SCM cursor;
@@ -63,9 +65,9 @@ static void invalidate(MAKE_NODE *node) {
 	return;
 	}
 
-static SCM touch_node(SCM smob, SCM args) {
+static SCM touch_node(SCM doc, SCM args) {
 	MAKE_NODE *node;
-	node = (MAKE_NODE *)SCM_SMOB_DATA(smob);
+	node = (MAKE_NODE *)SCM_SMOB_DATA(doc);
 	scm_lock_mutex(node->mutex);
 	invalidate(node);
 	if (scm_is_null(args)) {
@@ -82,7 +84,7 @@ static SCM touch_node(SCM smob, SCM args) {
 		break;
 		}
 	scm_unlock_mutex(node->mutex);
-	scm_remember_upto_here_2(smob, args);
+	scm_remember_upto_here_2(doc, args);
 	return SCM_BOOL_T;
 	}
 
@@ -152,53 +154,47 @@ static MAKE_NODE *make_node(int type) {
 	return node;
 	}
 
-static SCM make_node_datum(SCM payload) {
-	MAKE_NODE *node;
-	node = make_node(TYPE_DATUM);
-	node->dirty = 0;
-	node->payload = payload;
-	scm_remember_upto_here_1(payload);
-	SCM_RETURN_NEWSMOB(make_node_tag, node);
-	}
-
-static SCM make_node_file(SCM path) {
-	MAKE_NODE *node;
-	node = make_node(TYPE_FILE);
-	node->filepath = scm_to_locale_string(path);
-	node->dirty = 1;
-	scm_remember_upto_here_1(path);
-	SCM_RETURN_NEWSMOB(make_node_tag, node);
-	}
-
-static void add_ascendant(SCM obj, SCM ascendant) {
+static void add_ascendant(SCM dependent, SCM self) {
 	MAKE_NODE *node;
 	SCM list;
-	node = (MAKE_NODE *)SCM_SMOB_DATA(obj);
+	node = (MAKE_NODE *)SCM_SMOB_DATA(dependent);
 	scm_lock_mutex(node->mutex);
 	list = node->ascendants;
 	while (list != SCM_EOL) {
-		if (scm_is_eq(SCM_CAR(list), ascendant)) {
+		if (scm_is_eq(SCM_CAR(list), self)) {
 			scm_unlock_mutex(node->mutex);
 			return;
 			}
 		list = SCM_CDR(list);
 		}
-	node->ascendants = scm_cons(ascendant, node->ascendants);
+	node->ascendants = scm_cons(self, node->ascendants);
 	scm_unlock_mutex(node->mutex);
 	return;
 	}
 
-static SCM make_node_chain(SCM ingredients, SCM recipe) {
+static SCM make_doc(SCM ingredients, SCM recipe) {
 	MAKE_NODE *node;
-	SCM obj, cursor, smob;
+	SCM smob, cursor;
+	if (scm_is_symbol(ingredients)) {
+		if (ingredients == file_sym) {
+			node = make_node(TYPE_FILE);
+			node->filepath = scm_to_locale_string(recipe);
+			node->dirty = 1;
+			}
+		else {
+			node = make_node(TYPE_DATUM);
+			node->dirty = 0;
+			node->payload = recipe;
+			}
+		SCM_RETURN_NEWSMOB(make_node_tag, node);
+		}
 	node = make_node(TYPE_CHAIN);
 	node->dirty = 1;
 	node->callback = recipe;
 	SCM_NEWSMOB(smob, make_node_tag, node);
 	cursor = ingredients;
 	while (cursor != SCM_EOL) {
-		obj = SCM_CAR(cursor);
-		add_ascendant(obj, smob);
+		add_ascendant(SCM_CAR(cursor), smob);
 		cursor = SCM_CDR(cursor);
 		}
 	scm_remember_upto_here_2(ingredients, recipe);
@@ -474,11 +470,11 @@ void init_cache(void) {
 	make_node_tag = scm_make_smob_type("make-node", sizeof(MAKE_NODE));
 	scm_set_smob_free(make_node_tag, free_node);
 	scm_set_smob_mark(make_node_tag, mark_node);
-	scm_c_define_gsubr("cache-datum", 1, 0, 0, make_node_datum);
-	scm_c_define_gsubr("cache-file", 1, 0, 0, make_node_file);
-	scm_c_define_gsubr("cache-chain", 2, 0, 0, make_node_chain);
-	scm_c_define_gsubr("cache-update", 1, 0, 1, touch_node);
-	scm_c_define_gsubr("cache-fetch", 1, 0, 1, fetch_node);
+	file_sym = scm_from_utf8_symbol("file");
+	data_sym = scm_from_utf8_symbol("data");
+	scm_c_define_gsubr("make-doc", 2, 0, 0, make_doc);
+	scm_c_define_gsubr("touch-doc", 1, 0, 1, touch_node);
+	scm_c_define_gsubr("fetch-doc", 1, 0, 1, fetch_node);
 	scm_c_define_gsubr("cache-set", 2, 0, 0, redis_set);
 	scm_c_define_gsubr("cache-hset", 3, 0, 0, redis_hset);
 	scm_c_define_gsubr("cache-append", 2, 0, 0, redis_append);

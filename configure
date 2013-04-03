@@ -3790,13 +3790,13 @@ _ACEOF
 
 fi
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for scm_boot_guile in -lguile" >&5
-$as_echo_n "checking for scm_boot_guile in -lguile... " >&6; }
-if ${ac_cv_lib_guile_scm_boot_guile+:} false; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for scm_boot_guile in -lguile-2.0" >&5
+$as_echo_n "checking for scm_boot_guile in -lguile-2.0... " >&6; }
+if ${ac_cv_lib_guile_2_0_scm_boot_guile+:} false; then :
   $as_echo_n "(cached) " >&6
 else
   ac_check_lib_save_LIBS=$LIBS
-LIBS="-lguile  $LIBS"
+LIBS="-lguile-2.0  $LIBS"
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -3816,22 +3816,22 @@ return scm_boot_guile ();
 }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_lib_guile_scm_boot_guile=yes
+  ac_cv_lib_guile_2_0_scm_boot_guile=yes
 else
-  ac_cv_lib_guile_scm_boot_guile=no
+  ac_cv_lib_guile_2_0_scm_boot_guile=no
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
 LIBS=$ac_check_lib_save_LIBS
 fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_guile_scm_boot_guile" >&5
-$as_echo "$ac_cv_lib_guile_scm_boot_guile" >&6; }
-if test "x$ac_cv_lib_guile_scm_boot_guile" = xyes; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_guile_2_0_scm_boot_guile" >&5
+$as_echo "$ac_cv_lib_guile_2_0_scm_boot_guile" >&6; }
+if test "x$ac_cv_lib_guile_2_0_scm_boot_guile" = xyes; then :
   cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBGUILE 1
+#define HAVE_LIBGUILE_2_0 1
 _ACEOF
 
-  LIBS="-lguile $LIBS"
+  LIBS="-lguile-2.0 $LIBS"
 
 fi
 

@@ -13,7 +13,7 @@ AC_PROG_CC
 
 # Checks for libraries.
 AC_CHECK_LIB([pthread], [pthread_cancel])
-AC_CHECK_LIB([guile], [scm_boot_guile])
+AC_CHECK_LIB([guile-2.0], [scm_boot_guile])
 AC_CHECK_LIB([pq], [PQconnectdb])
 AC_CHECK_LIB([jansson], [json_string])
 AC_CHECK_LIB([uuid], [uuid_generate])
