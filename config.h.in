@@ -21,8 +21,8 @@
 /* Define to 1 if you have the `curl' library (-lcurl). */
 #undef HAVE_LIBCURL
 
-/* Define to 1 if you have the `guile' library (-lguile). */
-#undef HAVE_LIBGUILE
+/* Define to 1 if you have the `guile-2.0' library (-lguile-2.0). */
+#undef HAVE_LIBGUILE_2_0
 
 /* Define to 1 if you have the `jansson' library (-ljansson). */
 #undef HAVE_LIBJANSSON
@@ -38,6 +38,9 @@
 
 /* Define to 1 if you have the `uuid' library (-luuid). */
 #undef HAVE_LIBUUID
+
+/* Define to 1 if you have the `xml2' library (-lxml2). */
+#undef HAVE_LIBXML2
 
 /* Define to 1 if you have the `localtime_r' function. */
 #undef HAVE_LOCALTIME_R
