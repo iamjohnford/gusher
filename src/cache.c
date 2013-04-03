@@ -107,12 +107,14 @@ static char *load_from_file(const char *path) {
 
 static SCM fetch_node(SCM smob, SCM args) {
 	MAKE_NODE * node;
+	SCM payload;
 	char *buf;
 	node = (MAKE_NODE *)SCM_SMOB_DATA(smob);
 	scm_lock_mutex(node->mutex);
 	if (!node->dirty) {
+		payload = node->payload;
 		scm_unlock_mutex(node->mutex);
-		return node->payload;
+		return payload;
 		}
 	log_msg("REGENERATE %08x\n", (unsigned long)smob);
 	node->dirty = 0;
@@ -132,9 +134,10 @@ static SCM fetch_node(SCM smob, SCM args) {
 						SCM_CAR(args));
 		break;
 		}
+	payload = node->payload;
 	scm_unlock_mutex(node->mutex);
 	scm_remember_upto_here_1(smob);
-	return node->payload;
+	return payload;
 	}
 
 static MAKE_NODE *make_node(int type) {
