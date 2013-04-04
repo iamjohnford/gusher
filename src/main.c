@@ -466,11 +466,13 @@ static void process_line(int fd) {
 static int threading;
 
 static void process_http(int sock) {
+	int sockc;
+	sockc = sock;
 	if (threading) {
-		scm_spawn_thread(dispatch, (void *)&sock,
+		scm_spawn_thread(dispatch, (void *)&sockc,
 				NULL, NULL);
 		}
-	else dispatch((void *)&sock);
+	else dispatch((void *)&sockc);
 	return;
 	}
 
