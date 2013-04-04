@@ -116,7 +116,7 @@ static SCM decode_timestamp(const char *string) {
 		here = index(here, ':') + 1;
 		sec = (int)(atof(here) + 0.5);
 		}
-	return make_time_intern(year, month, day, hour, min, sec);
+	return local_time_intern(year, month, day, hour, min, sec);
 	}
 
 static SCM pg_decode(char *string, int dtype) {

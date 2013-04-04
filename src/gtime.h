@@ -19,6 +19,6 @@
 #include <libguile.h>
 
 extern scm_t_bits time_tag;
-SCM make_time_intern(int, int, int, int, int, int);
+SCM local_time_intern(int, int, int, int, int, int);
 SCM format_time(SCM, SCM);
 void init_time(void);

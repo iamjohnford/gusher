@@ -25,7 +25,7 @@ struct g_time {
 
 scm_t_bits time_tag;
 
-SCM make_time_intern(int year, int month, int day,
+SCM local_time_intern(int year, int month, int day,
 			int hour, int minute, int second) {
 	SCM smob;
 	struct g_time *time;
@@ -43,9 +43,9 @@ SCM make_time_intern(int year, int month, int day,
 	return smob;
 	}
 
-static SCM make_time(SCM year, SCM month, SCM day,
+static SCM local_time(SCM year, SCM month, SCM day,
 			SCM hour, SCM minute, SCM second) {
-	return make_time_intern(scm_to_int(year),
+	return local_time_intern(scm_to_int(year),
 				scm_to_int(month),
 				scm_to_int(day),
 				scm_to_int(hour),
@@ -71,6 +71,7 @@ static SCM now_time(void) {
 	gtime->time.tm_wday = ltime->tm_wday;
 	gtime->time.tm_yday = ltime->tm_yday;
 	gtime->time.tm_isdst = ltime->tm_isdst;
+	gtime->time.tm_gmtoff = ltime->tm_gmtoff;
 	SCM_NEWSMOB(smob, time_tag, gtime);
 	return smob;
 	}
@@ -121,6 +122,7 @@ static SCM time_add(SCM time, SCM sec) {
 	gtime->time.tm_wday = ltime->tm_wday;
 	gtime->time.tm_yday = ltime->tm_yday;
 	gtime->time.tm_isdst = ltime->tm_isdst;
+	gtime->time.tm_gmtoff = ltime->tm_gmtoff;
 	SCM_NEWSMOB(smob, time_tag, gtime);
 	scm_remember_upto_here_1(time);
 	return smob;
@@ -168,9 +170,16 @@ static SCM time_sec(SCM time) {
 	return scm_from_signed_integer(gtime->time.tm_sec);
 	}
 
+static SCM time_offset(SCM time) {
+	struct g_time *gtime;
+	scm_assert_smob_type(time_tag, time);
+	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	return scm_from_signed_integer(gtime->time.tm_gmtoff);
+	}
+
 void init_time(void) {
 	time_tag = scm_make_smob_type("timestamp", sizeof(struct g_time));
-	scm_c_define_gsubr("time-make", 6, 0, 0, make_time);
+	scm_c_define_gsubr("time-local", 6, 0, 0, local_time);
 	scm_c_define_gsubr("time-format", 2, 0, 0, format_time);
 	scm_c_define_gsubr("time-now", 0, 0, 0, now_time);
 	scm_c_define_gsubr("time-diff", 2, 0, 0, time_diff);
@@ -181,4 +190,5 @@ void init_time(void) {
 	scm_c_define_gsubr("time-hour", 1, 0, 0, time_hour);
 	scm_c_define_gsubr("time-min", 1, 0, 0, time_min);
 	scm_c_define_gsubr("time-sec", 1, 0, 0, time_sec);
+	scm_c_define_gsubr("time-gmtoffset", 1, 0, 0, time_offset);
 	} 
