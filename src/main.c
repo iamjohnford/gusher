@@ -407,13 +407,30 @@ static void signal_handler(int sig) {
 	running = 0;
 	}
 
+static char linebuf[1024];
+
+static SCM body_proc(void *data) {
+	SCM obj;
+	obj = scm_c_eval_string(linebuf);
+	if (obj == SCM_UNSPECIFIED) return SCM_BOOL_T;
+	scm_call_1(scm_c_eval_string("write"), obj);
+	scm_call_0(scm_c_eval_string("newline"));
+	return SCM_BOOL_T;
+	}
+
+static SCM catch_proc(void *data, SCM key, SCM params) {
+	scm_call_1(scm_c_eval_string("write"), key);
+	scm_call_0(scm_c_eval_string("newline"));
+	scm_call_1(scm_c_eval_string("write"), params);
+	scm_call_0(scm_c_eval_string("newline"));
+	return SCM_BOOL_T;
+	}
+
 int main(int argc, char **argv) {
 	fd_set fds;
 	struct timeval timeout;
-	char buf[1024], lambda[1024];
 	int opt, n, sock, optval;
 	int hisock, fdin;
-	SCM display, newline, obj, port, expr, handler;
 	struct sockaddr_in server_addr;    
 	int http_port;
 	int threading;
@@ -478,9 +495,6 @@ int main(int argc, char **argv) {
 		fputs(prompt, stdout);
 		fflush(stdout);
 		}
-	display = scm_c_eval_string("display");
-	newline = scm_c_eval_string("newline");
-	handler = scm_c_eval_string("err-handler");
 	running = 1;
 	while (running) {  
 		FD_ZERO(&fds);
@@ -492,26 +506,15 @@ int main(int argc, char **argv) {
 		select(hisock + 1, &fds, NULL, NULL, &timeout);
 		if (running == 0) break; // why?
 		if (FD_ISSET(fdin, &fds)) {
-			n = read(fdin, buf, 1024);
+			n = read(fdin, linebuf, 1024);
 			if (n == 0) break;
 			if (n < 0) printf("err: %s\n", strerror(errno));
-			buf[n] = '\0';
-			//obj = scm_c_eval_string(buf);
-			//scm_call_1(scm_c_eval_string("write"), obj);
-			//scm_call_0(newline);
-			while (isspace(buf[--n])) buf[n] = '\0';
-			sprintf(lambda, "(lambda () %s)", buf);
-printf("EVAL %s\n", lambda);
-fflush(stdout);
-			port = scm_open_input_string(
-				scm_from_locale_string(lambda));
-			expr = scm_read(port);
-			obj = scm_primitive_eval(expr);
-			obj = scm_catch(SCM_BOOL_T, obj, handler);
-			if (obj != SCM_UNSPECIFIED) {
-				scm_call_1(display, obj);
-				scm_call_0(newline);
-				}
+			linebuf[n] = '\0';
+			while (isspace(linebuf[--n])) linebuf[n] = '\0';
+			scm_c_catch(SCM_BOOL_T,
+					body_proc, NULL,
+					catch_proc, NULL,
+					NULL, NULL);
 			fputs(prompt, stdout);
 			fflush(stdout);
 			}
