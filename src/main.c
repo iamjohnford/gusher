@@ -32,6 +32,8 @@
 #include <libguile.h>
 #include <ctype.h>
 #include <uuid/uuid.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #include "postgres.h"
 #include "gtime.h"
@@ -54,7 +56,7 @@ struct handler_entry {
 	};
 
 static int running;
-static const char *prompt = "eval> ";
+static const char *prompt = "gusher> ";
 static struct handler_entry *handlers = NULL;
 static char gusher_root[1024];
 
@@ -407,10 +409,9 @@ static void signal_handler(int sig) {
 	running = 0;
 	}
 
-static char linebuf[1024];
-
 static SCM body_proc(void *data) {
 	SCM obj;
+	char *linebuf = (char *)data;
 	obj = scm_c_eval_string(linebuf);
 	if (obj == SCM_UNSPECIFIED) return SCM_BOOL_T;
 	scm_call_1(scm_c_eval_string("write"), obj);
@@ -426,14 +427,81 @@ static SCM catch_proc(void *data, SCM key, SCM params) {
 	return SCM_BOOL_T;
 	}
 
+static void line_handler(char *line) {
+	if (line == NULL) {
+		running = 0;
+		rl_callback_handler_remove();
+		return;
+		}
+	add_history(line);
+	scm_c_catch(SCM_BOOL_T,
+			body_proc, (void *)line,
+			catch_proc, NULL,
+			NULL, NULL);
+	free(line);
+	return;
+	}
+
+static void process_line(int fd) {
+	int n;
+	char linebuf[1024];
+	if (isatty(fd)) {
+		rl_callback_read_char();
+		return;
+		}
+	n = read(fd, linebuf, sizeof(linebuf));
+	if (n == 0) {
+		running = 0;
+		return;
+		}
+	if (n < 0) log_msg("err: %s\n", strerror(errno));
+	linebuf[n] = '\0';
+	scm_c_catch(SCM_BOOL_T,
+			body_proc, linebuf,
+			catch_proc, NULL,
+			NULL, NULL);
+	return;
+	}
+
+static int threading;
+
+static void process_http(int sock) {
+	if (threading) {
+		scm_spawn_thread(dispatch, (void *)&sock,
+				NULL, NULL);
+		}
+	else dispatch((void *)&sock);
+	return;
+	}
+
+static int http_socket(int port) {
+	int sock, optval;
+	struct sockaddr_in server_addr;    
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	optval = 1;
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+	memset(&server_addr, 0, sizeof(struct sockaddr_in));
+        server_addr.sin_family = AF_INET;         
+        server_addr.sin_port = htons(port);
+        server_addr.sin_addr.s_addr = INADDR_ANY; 
+        if (bind(sock, (struct sockaddr *)&server_addr,
+			sizeof(struct sockaddr_in)) != 0) {
+				fprintf(stderr, "can't bind: %s\n", strerror(errno));
+				return -1;
+				}
+        if (listen(sock, 5) != 0) {
+			fprintf(stderr, "can't listen: %s\n", strerror(errno));
+			return -1;
+			}
+	return sock;
+	}
+
 int main(int argc, char **argv) {
 	fd_set fds;
 	struct timeval timeout;
-	int opt, n, sock, optval;
+	int opt, sock;
 	int hisock, fdin;
-	struct sockaddr_in server_addr;    
 	int http_port;
-	int threading;
 	int background;
 	http_port = DEFAULT_PORT;
 	threading = 1;
@@ -465,22 +533,8 @@ int main(int argc, char **argv) {
 	if (strlen(gusher_root) == 0) {
 		sprintf(gusher_root, "%s/gusher", LOCALLIB);
 		}
-	sock = socket(AF_INET, SOCK_STREAM, 0);
-	optval = 1;
-	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-	memset(&server_addr, 0, sizeof(struct sockaddr_in));
-        server_addr.sin_family = AF_INET;         
-        server_addr.sin_port = htons(http_port);
-        server_addr.sin_addr.s_addr = INADDR_ANY; 
-        if (bind(sock, (struct sockaddr *)&server_addr,
-			sizeof(struct sockaddr_in)) != 0) {
-		fprintf(stderr, "can't bind: %s\n", strerror(errno));
-		exit(1);
-		};
-        if (listen(sock, 5) != 0) {
-		fprintf(stderr, "can't listen: %s\n", strerror(errno));
-		exit(1);
-		}
+	sock = http_socket(http_port);
+	if (sock < 0) exit(1);
 	scm_init_guile();
 	init_env();
 	while (optind < argc) {
@@ -491,11 +545,9 @@ int main(int argc, char **argv) {
 	hisock = fdin = fileno(stdin);
 	if (sock > hisock) hisock = sock;
 	if (inotify_fd > hisock) hisock = inotify_fd;
-	if (!background) {
-		fputs(prompt, stdout);
-		fflush(stdout);
-		}
 	running = 1;
+	if (isatty(fdin))
+		rl_callback_handler_install(prompt, line_handler);
 	while (running) {  
 		FD_ZERO(&fds);
 		FD_SET(sock, &fds);
@@ -505,26 +557,8 @@ int main(int argc, char **argv) {
 		timeout.tv_usec = 0;
 		select(hisock + 1, &fds, NULL, NULL, &timeout);
 		if (running == 0) break; // why?
-		if (FD_ISSET(fdin, &fds)) {
-			n = read(fdin, linebuf, 1024);
-			if (n == 0) break;
-			if (n < 0) printf("err: %s\n", strerror(errno));
-			linebuf[n] = '\0';
-			while (isspace(linebuf[--n])) linebuf[n] = '\0';
-			scm_c_catch(SCM_BOOL_T,
-					body_proc, NULL,
-					catch_proc, NULL,
-					NULL, NULL);
-			fputs(prompt, stdout);
-			fflush(stdout);
-			}
-		if (FD_ISSET(sock, &fds)) {
-			if (threading) {
-				scm_spawn_thread(dispatch, (void *)&sock,
-						NULL, NULL);
-				}
-			else dispatch((void *)&sock);
-			}
+		if (FD_ISSET(fdin, &fds)) process_line(fdin);
+		if (FD_ISSET(sock, &fds)) process_http(sock);
 		if (FD_ISSET(inotify_fd, &fds)) process_inotify_event();
 		}
 	log_msg("bye!\n");

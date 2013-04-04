@@ -30,3 +30,4 @@ a cached item's dependencies and its build procedure
 subsystem to trigger application
 events asynchronously in response to file system activity
 
+- interactive command line editing and history (libreadline)
