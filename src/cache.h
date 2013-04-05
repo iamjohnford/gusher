@@ -17,3 +17,5 @@
 */
 
 void init_cache(void);
+SCM get_session(const char *);
+SCM put_session(const char *, SCM);

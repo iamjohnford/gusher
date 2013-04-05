@@ -20,3 +20,4 @@
 
 void init_json(void);
 SCM json_decode(SCM);
+SCM json_encode(SCM);

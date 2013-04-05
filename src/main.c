@@ -32,6 +32,7 @@
 #include <libguile.h>
 #include <ctype.h>
 #include <uuid/uuid.h>
+#include <regex.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -48,6 +49,7 @@
 #define addlist(list,item) (list=scm_cons((item),(list)))
 #define DEFAULT_PORT 8080
 #define BOOT_FILE "boot.scm"
+#define COOKIE_KEY "GUSHERID"
 
 struct handler_entry {
 	char *path;
@@ -59,6 +61,8 @@ static int running;
 static const char *prompt = "gusher> ";
 static struct handler_entry *handlers = NULL;
 static char gusher_root[1024];
+static regex_t cookie_pat;
+static const char *hex = "0123456789abcdef";
 
 static int sorter(const void *a, const void *b) {
 	struct handler_entry **e1, **e2;
@@ -270,10 +274,48 @@ static SCM json_http_response(SCM enc_content) {
 	return resp;
 	}
 
+static char *session_cookie(SCM request) {
+	SCM dough;
+	char *buf, *key;
+	size_t len;
+	regmatch_t match[3];
+	dough = scm_assq_ref(request, makesym("cookie"));
+	if (dough == SCM_BOOL_F) return NULL;
+	key = NULL;
+	buf = scm_to_locale_string(dough);
+	if (regexec(&cookie_pat, buf, 2, match, 0) == 0) {
+		len = match[1].rm_eo - match[1].rm_so;
+		key = (char *)malloc(len + 1);
+		strncpy(key, &buf[match[1].rm_so], len);
+		key[len] = '\0';
+		}
+	free(buf);
+	return key;
+	}
+
+static char *put_uuid(char *where) {
+	uuid_t out;
+	int i;
+	char *pt;
+	uuid_generate(out);
+	pt = where;
+	for (i = 0; i < 16; i++) {
+		*pt++ = hex[((out[i] & 0xf0) >> 4)];
+		*pt++ = hex[out[i] & 0x0f];
+		}
+	*pt = '\0';
+	return where;
+	}
+
+static SCM uuid_gen(void) {
+	char buf[33];
+	return scm_from_locale_string(put_uuid(buf));
+	}
+
 static SCM dispatch(void *data) {
 	socklen_t size;
 	int sock;
-	char *hname, *hvalue, *body, *status;
+	char *hname, *hvalue, *body, *status, *cookie;
 	int conn, reqline, eoh, n;
 	SCM request, reply, handler, headers, pair, val;
 	char *mark, *pt, buf[65536], sbuf[256];
@@ -322,6 +364,26 @@ static SCM dispatch(void *data) {
 	send_all(conn, sbuf);
 	reply = SCM_CDR(reply);
 	headers = SCM_CAR(reply);
+	if ((cookie = session_cookie(request)) == NULL) {
+		char buf[128];
+		cookie = (char *)malloc(33);
+		put_uuid(cookie);
+		sprintf(buf, "%s=%s; Path=/", COOKIE_KEY, cookie);
+		headers = scm_acons(
+			scm_from_locale_string("set-cookie"),
+			scm_from_locale_string(buf),
+			headers);
+		}
+	if (get_session(cookie) == SCM_BOOL_F) {
+		SCM session;
+		session = SCM_EOL;
+		session = scm_acons(makesym("new"), SCM_BOOL_T, session);
+		put_session(cookie, session);
+		}
+	request = scm_acons(makesym("session"),
+					scm_take_locale_string(cookie), request);
+scm_call_1(scm_c_eval_string("display"), request);
+scm_call_0(scm_c_eval_string("newline"));
 	while (headers != SCM_EOL) {
 		pair = SCM_CAR(headers);
 		hname = scm_buf_string(SCM_CAR(pair), buf, sizeof(buf));
@@ -351,15 +413,6 @@ static SCM dispatch(void *data) {
 	return SCM_BOOL_T;
 	}
 
-static SCM uuid_gen(void) {
-	uuid_t out;
-	char buf[33];
-	int i;
-	uuid_generate(out);
-	for (i = 0; i < 16; i++) sprintf(&buf[i * 2], "%02x", out[i]);
-	return scm_from_locale_string((const char *)buf);
-	}
-
 static SCM err_handler(SCM key, SCM rest) {
 	SCM display, newline;
 	display = scm_c_eval_string("display");
@@ -370,7 +423,7 @@ static SCM err_handler(SCM key, SCM rest) {
 	}
 
 static void init_env(void) {
-	char *here;
+	char *here, pats[64];
 	struct stat bstat;
 	scm_c_define_gsubr("http", 2, 0, 0, set_handler);
 	scm_c_define_gsubr("not-found", 1, 0, 0, default_not_found);
@@ -379,6 +432,8 @@ static void init_env(void) {
 	scm_c_define_gsubr("simple-response", 2, 0, 0, simple_http_response);
 	scm_c_define_gsubr("json-response", 1, 0, 0, json_http_response);
 	scm_c_define("responders", SCM_EOL);
+	sprintf(pats, "%s=([0-9a-f]+)", COOKIE_KEY);
+	regcomp(&cookie_pat, pats, REG_EXTENDED);
 	init_postgres();
 	init_time();
 	init_cache();
@@ -399,6 +454,7 @@ static void init_env(void) {
 	}
 
 static void shutdown_env(void) {
+	regfree(&cookie_pat);
 	shutdown_inotify();
 	shutdown_http();
 	shutdown_log();

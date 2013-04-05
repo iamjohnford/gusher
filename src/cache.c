@@ -30,6 +30,7 @@
 
 #include "gnotify.h"
 #include "log.h"
+#include "json.h"
 
 #define DEFAULT_REDIS_PORT 6379
 #define FILE_CACHE "file-cache"
@@ -315,18 +316,28 @@ static SCM redis_set(SCM key, SCM value) {
 	return SCM_BOOL_T;
 	}
 
-static SCM redis_hset(SCM key, SCM field, SCM value) {
-	char *ckey, *cvalue;
-	if (redis_sock < 0) return SCM_BOOL_F;
+static int redis_hset_c(const char *key, const char *field,
+						const char *value) {
+	if (redis_sock < 0) return 0;
 	send_header("HSET", 3);
-	send_arg(ckey = scm_to_locale_string(key));
-	free(ckey);
-	send_arg(ckey = scm_to_locale_string(field));
-	free(ckey);
-	send_arg(cvalue = scm_to_locale_string(value));
-	free(cvalue);
+	send_arg(key);
+	send_arg(field);
+	send_arg(value);
 	getrline(NULL);
-	return SCM_BOOL_T;
+	return 1;
+	}
+
+static SCM redis_hset(SCM key, SCM field, SCM value) {
+	char *ckey, *cfield, *cvalue;
+	int res;
+	ckey = scm_to_locale_string(key);
+	cfield = scm_to_locale_string(field);
+	cvalue = scm_to_locale_string(value);
+	res = redis_hset_c(ckey, cfield, cvalue);
+	free(ckey);
+	free(cfield);
+	free(cvalue);
+	return (res ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
 static SCM redis_append(SCM key, SCM value) {
@@ -358,22 +369,46 @@ static SCM redis_get(SCM key) {
 	return scm_take_locale_string(value);
 	}
 
-static SCM redis_hget(SCM key, SCM field) {
-	char *ckey;
+static char *redis_hget_c(const char *key, const char *field) {
 	char cmd[256], *value;
 	int size;
-	if (redis_sock < 0) return SCM_BOOL_F;
+	if (redis_sock < 0) return NULL;
 	send_header("HGET", 2);
-	send_arg(ckey = scm_to_locale_string(key));
-	free(ckey);
-	send_arg(ckey = scm_to_locale_string(field));
-	free(ckey);
+	send_arg(key);
+	send_arg(field);
 	getrline(cmd);
-	if ((size = atoi(&cmd[1])) < 0) return SCM_BOOL_F;
+	if ((size = atoi(&cmd[1])) < 0) return NULL;
 	value = (char *)malloc(size + 1);
 	recv(redis_sock, value, size, 0);
 	value[size] = '\0';
 	recv(redis_sock, cmd, 2, 0);
+	return value;
+	}
+
+SCM get_session(const char *sesskey) {
+	char *value;
+	value = redis_hget_c("SESSIONS", sesskey);
+	if (value == NULL) return SCM_BOOL_F;
+	return json_decode(scm_take_locale_string(value));
+	}
+
+SCM put_session(const char *sesskey, SCM table) {
+	int res;
+	char *buf;
+	buf = scm_to_locale_string(json_encode(table));
+	res = redis_hset_c("SESSIONS", sesskey, buf);
+	free(buf);
+	return (res ? SCM_BOOL_T : SCM_BOOL_F);
+	}
+
+static SCM redis_hget(SCM key, SCM field) {
+	char *ckey, *cfield, *value;
+	ckey = scm_to_locale_string(key);
+	cfield = scm_to_locale_string(field);
+	value = redis_hget_c(ckey, cfield);
+	free(ckey);
+	free(cfield);
+	if (value == NULL) return SCM_BOOL_F;
 	return scm_take_locale_string(value);
 	}
 

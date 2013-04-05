@@ -74,7 +74,7 @@ static json_t *json_build(SCM obj) {
 	return jobj;
 	}
 
-static SCM json_encode(SCM obj) {
+SCM json_encode(SCM obj) {
 	char *buf;
 	int n;
 	json_t *root;
