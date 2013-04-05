@@ -39,6 +39,7 @@
 #define TYPE_CHAIN 2
 
 static scm_t_bits make_node_tag;
+static const char *sessions_key = "SESSIONS";
 
 typedef struct make_node {
 	SCM callback;
@@ -387,7 +388,7 @@ static char *redis_hget_c(const char *key, const char *field) {
 
 SCM get_session(const char *sesskey) {
 	char *value;
-	value = redis_hget_c("SESSIONS", sesskey);
+	value = redis_hget_c(sessions_key, sesskey);
 	if (value == NULL) return SCM_BOOL_F;
 	return json_decode(scm_take_locale_string(value));
 	}
@@ -396,7 +397,7 @@ SCM put_session(const char *sesskey, SCM table) {
 	int res;
 	char *buf;
 	buf = scm_to_locale_string(json_encode(table));
-	res = redis_hset_c("SESSIONS", sesskey, buf);
+	res = redis_hset_c(sessions_key, sesskey, buf);
 	free(buf);
 	return (res ? SCM_BOOL_T : SCM_BOOL_F);
 	}
