@@ -312,22 +312,25 @@ static SCM uuid_gen(void) {
 	return scm_from_locale_string(put_uuid(buf));
 	}
 
+struct tframe {
+	int conn;
+	char ipaddr[32];
+	int rport;
+	};
+
 static SCM dispatch(void *data) {
-	socklen_t size;
-	int sock;
+	struct tframe *frame;
 	char *hname, *hvalue, *body, *status, *cookie;
 	int conn, reqline, eoh, n;
-	SCM request, reply, handler, headers, pair, val;
+	SCM request, reply, handler, headers, pair, val, cookie_header;
 	char *mark, *pt, buf[65536], sbuf[256];
-	struct sockaddr_in client;
-	size = sizeof(struct sockaddr_in);
-	sock = *((int *)data);
-	conn = accept(sock, (struct sockaddr *)&client, &size);
+	frame = (struct tframe *)data;
+	conn = frame->conn;
 	request = SCM_EOL;
-	addlist(request, sym_string("remote-host",
-				inet_ntoa(client.sin_addr)));
+	addlist(request, sym_string("remote-host", frame->ipaddr));
 	addlist(request, scm_cons(makesym("remote-port"),
-		scm_from_signed_integer(ntohs(client.sin_port))));
+		scm_from_signed_integer(frame->rport)));
+	free(frame);
 	reqline = 1;
 	eoh = 0;
 	while (!eoh) {
@@ -358,32 +361,34 @@ static SCM dispatch(void *data) {
 	if ((handler = find_handler(request)) == SCM_BOOL_F) {
 		handler = scm_c_eval_string("not-found");
 		}
+	cookie_header = SCM_EOL;
+	if ((cookie = session_cookie(request)) == NULL) {
+		char buf[128];
+		cookie = (char *)malloc(33);
+		put_uuid(cookie);
+		sprintf(buf, "%s=%s; Path=/", COOKIE_KEY, cookie);
+		cookie_header = scm_cons(scm_from_locale_string("set-cookie"),
+			scm_from_locale_string(buf));
+		}
+	if (get_session(cookie) == SCM_BOOL_F) {
+		SCM session;
+		session = SCM_EOL;
+		session = scm_acons(makesym("_NEW_"), SCM_BOOL_T, session);
+		put_session(cookie, session);
+		}
+	request = scm_acons(makesym("session"),
+					scm_take_locale_string(cookie), request);
+/*scm_call_1(scm_c_eval_string("display"), request);
+scm_call_0(scm_c_eval_string("newline"));*/
 	reply = scm_call_1(handler, request);
 	status = scm_buf_string(SCM_CAR(reply), buf, sizeof(buf));
 	sprintf(sbuf, "HTTP/1.1 %s\r\n", status);
 	send_all(conn, sbuf);
 	reply = SCM_CDR(reply);
 	headers = SCM_CAR(reply);
-	if ((cookie = session_cookie(request)) == NULL) {
-		char buf[128];
-		cookie = (char *)malloc(33);
-		put_uuid(cookie);
-		sprintf(buf, "%s=%s; Path=/", COOKIE_KEY, cookie);
-		headers = scm_acons(
-			scm_from_locale_string("set-cookie"),
-			scm_from_locale_string(buf),
-			headers);
-		}
-	if (get_session(cookie) == SCM_BOOL_F) {
-		SCM session;
-		session = SCM_EOL;
-		session = scm_acons(makesym("new"), SCM_BOOL_T, session);
-		put_session(cookie, session);
-		}
-	request = scm_acons(makesym("session"),
-					scm_take_locale_string(cookie), request);
-scm_call_1(scm_c_eval_string("display"), request);
-scm_call_0(scm_c_eval_string("newline"));
+	val = pair = SCM_EOL;
+	if (cookie_header != SCM_EOL)
+		headers = scm_cons(cookie_header, headers);
 	while (headers != SCM_EOL) {
 		pair = SCM_CAR(headers);
 		hname = scm_buf_string(SCM_CAR(pair), buf, sizeof(buf));
@@ -410,6 +415,10 @@ scm_call_0(scm_c_eval_string("newline"));
 	send_all(conn, body);
 	free(body);
 	close(conn);
+	scm_remember_upto_here_2(request, headers);
+	scm_remember_upto_here_2(reply, handler);
+	scm_remember_upto_here_1(cookie_header);
+	scm_remember_upto_here_2(pair, val);
 	return SCM_BOOL_T;
 	}
 
@@ -522,13 +531,18 @@ static void process_line(int fd) {
 static int threading;
 
 static void process_http(int sock) {
-	int sockc;
-	sockc = sock;
+	socklen_t size;
+	struct tframe *frame;
+	struct sockaddr_in client;
+	size = sizeof(struct sockaddr_in);
+	frame = (struct tframe *)malloc(sizeof(struct tframe));
+	frame->conn = accept(sock, (struct sockaddr *)&client, &size);
+	strcpy(frame->ipaddr, inet_ntoa(client.sin_addr));
+	frame->rport = ntohs(client.sin_port);
 	if (threading) {
-		scm_spawn_thread(dispatch, (void *)&sockc,
-				NULL, NULL);
+		scm_spawn_thread(dispatch, (void *)frame, NULL, NULL);
 		}
-	else dispatch((void *)&sockc);
+	else dispatch((void *)frame);
 	return;
 	}
 

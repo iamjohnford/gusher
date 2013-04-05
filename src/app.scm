@@ -27,7 +27,11 @@ FOO!
 
 (http-html "/index"
 	(lambda (req)
-		(fill-template home-t #t '((header . "my header")))
+		(fill-template home-t #t
+			(list
+				(cons 'header (assq-ref req 'session))
+				)
+			)
 		)
 	)
 (http-html "/foo"     (lambda (req) (assq-ref req 'query-string)))
