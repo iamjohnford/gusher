@@ -55,6 +55,7 @@ static int redis_sock = -1;
 static int redis_port;
 static SCM file_sym;
 static SCM data_sym;
+static SCM redis_mutex;
 
 static void invalidate(MAKE_NODE *node) {
 	SCM cursor;
@@ -140,7 +141,8 @@ static SCM fetch_node(SCM smob, SCM args) {
 		}
 	payload = node->payload;
 	scm_unlock_mutex(node->mutex);
-	scm_remember_upto_here_1(smob);
+	scm_remember_upto_here_2(smob, args);
+	scm_remember_upto_here_1(payload);
 	return payload;
 	}
 
@@ -308,23 +310,27 @@ static char *redis_request(const char *cmd, char *response) {
 static SCM redis_set(SCM key, SCM value) {
 	char *ckey, *cvalue;
 	if (redis_sock < 0) return SCM_BOOL_F;
+	scm_lock_mutex(redis_mutex);
 	send_header("SET", 2);
 	send_arg(ckey = scm_to_locale_string(key));
 	send_arg(cvalue = scm_to_locale_string(value));
 	free(ckey);
 	free(cvalue);
 	getrline(NULL);
+	scm_unlock_mutex(redis_mutex);
 	return SCM_BOOL_T;
 	}
 
 static int redis_hset_c(const char *key, const char *field,
 						const char *value) {
 	if (redis_sock < 0) return 0;
+	scm_lock_mutex(redis_mutex);
 	send_header("HSET", 3);
 	send_arg(key);
 	send_arg(field);
 	send_arg(value);
 	getrline(NULL);
+	scm_unlock_mutex(redis_mutex);
 	return 1;
 	}
 
@@ -344,12 +350,14 @@ static SCM redis_hset(SCM key, SCM field, SCM value) {
 static SCM redis_append(SCM key, SCM value) {
 	char *ckey, *cvalue;
 	if (redis_sock < 0) return SCM_BOOL_F;
+	scm_lock_mutex(redis_mutex);
 	send_header("APPEND", 2);
 	send_arg(ckey = scm_to_locale_string(key));
 	send_arg(cvalue = scm_to_locale_string(value));
 	free(ckey);
 	free(cvalue);
 	getrline(NULL);
+	scm_unlock_mutex(redis_mutex);
 	return SCM_BOOL_T;
 	}
 
@@ -358,31 +366,42 @@ static SCM redis_get(SCM key) {
 	char cmd[256], *value;
 	int size;
 	if (redis_sock < 0) return SCM_BOOL_F;
+	scm_lock_mutex(redis_mutex);
 	send_header("GET", 1);
 	send_arg(ckey = scm_to_locale_string(key));
 	free(ckey);
 	getrline(cmd);
-	if ((size = atoi(&cmd[1])) < 0) return SCM_BOOL_F;
+	if ((size = atoi(&cmd[1])) < 0) {
+		scm_unlock_mutex(redis_mutex);
+		return SCM_BOOL_F;
+		}
 	value = (char *)malloc(size + 1);
 	recv(redis_sock, value, size, 0);
 	value[size] = '\0';
 	recv(redis_sock, cmd, 2, 0);
-	return scm_take_locale_string(value);
+	SCM out = scm_take_locale_string(value);
+	scm_unlock_mutex(redis_mutex);
+	return out;
 	}
 
 static char *redis_hget_c(const char *key, const char *field) {
 	char cmd[256], *value;
 	int size;
 	if (redis_sock < 0) return NULL;
+	scm_lock_mutex(redis_mutex);
 	send_header("HGET", 2);
 	send_arg(key);
 	send_arg(field);
 	getrline(cmd);
-	if ((size = atoi(&cmd[1])) < 0) return NULL;
+	if ((size = atoi(&cmd[1])) < 0) {
+		scm_unlock_mutex(redis_mutex);
+		return NULL;
+		}
 	value = (char *)malloc(size + 1);
 	recv(redis_sock, value, size, 0);
 	value[size] = '\0';
 	recv(redis_sock, cmd, 2, 0);
+	scm_unlock_mutex(redis_mutex);
 	return value;
 	}
 
@@ -399,6 +418,7 @@ SCM put_session(const char *sesskey, SCM table) {
 	buf = scm_to_locale_string(json_encode(table));
 	res = redis_hset_c(sessions_key, sesskey, buf);
 	free(buf);
+	scm_remember_upto_here_1(table);
 	return (res ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
@@ -421,10 +441,12 @@ static SCM redis_get_file(SCM path) {
 	if (redis_sock < 0) return SCM_BOOL_F;
 	key = scm_from_locale_string(FILE_CACHE);
 	spath = scm_to_locale_string(path);
+	scm_lock_mutex(redis_mutex);
 	send_header("HEXISTS", 2);
 	send_arg(FILE_CACHE);
 	send_arg(spath);
 	getrline(cmd);
+	scm_unlock_mutex(redis_mutex);
 	if (atoi(&cmd[1]) == 1) {
 log_msg("load %s from cache\n", spath);
 		free(spath);
@@ -448,6 +470,8 @@ log_msg("load %s from cache\n", spath);
 	redis_hset(key, path, content);
 log_msg("load %s from FS\n", spath);
 	free(spath);
+	scm_remember_upto_here_2(key, content);
+	scm_remember_upto_here_1(path);
 	return content;
 	}
 
@@ -455,10 +479,12 @@ static SCM redis_del(SCM key) {
 	char *ckey;
 	char cmd[256];
 	if (redis_sock < 0) return SCM_BOOL_F;
+	scm_lock_mutex(redis_mutex);
 	send_header("DEL", 1);
 	send_arg(ckey = scm_to_locale_string(key));
 	free(ckey);
 	getrline(cmd);
+	scm_unlock_mutex(redis_mutex);
 	return scm_from_signed_integer(atoi(&cmd[1]));
 	}
 
@@ -466,31 +492,35 @@ static SCM redis_exists(SCM key) {
 	char *ckey;
 	char cmd[256];
 	if (redis_sock < 0) return SCM_BOOL_F;
+	scm_lock_mutex(redis_mutex);
 	send_header("EXISTS", 1);
 	send_arg(ckey = scm_to_locale_string(key));
 	free(ckey);
 	getrline(cmd);
-	if (atoi(&cmd[1]) == 1) return SCM_BOOL_T;
-	return SCM_BOOL_F;
+	scm_unlock_mutex(redis_mutex);
+	return (atoi(&cmd[1]) == 1 ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
 static SCM redis_ping(void) {
 	char reply[64];
 	if (redis_sock < 0) return SCM_BOOL_F;
+	scm_lock_mutex(redis_mutex);
 	send_header("PING", 0);
 	getrline(reply);
-	if (strcmp(reply, "+PONG") == 0) return SCM_BOOL_T;
-	return SCM_BOOL_F;
+	scm_unlock_mutex(redis_mutex);
+	return (strcmp(reply, "+PONG") == 0 ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
 static SCM edit_watch_handler(SCM path, SCM mask) {
 	char *spath;
 	spath = scm_to_locale_string(path);
+	scm_lock_mutex(redis_mutex);
 	send_header("HDEL", 2);
 	send_arg(FILE_CACHE);
 	send_arg(spath);
 	getrline(NULL);
 	free(spath);
+	scm_unlock_mutex(redis_mutex);
 	return SCM_BOOL_T;
 	}
 
@@ -501,6 +531,8 @@ static SCM watch_edit(SCM dir) {
 	}
 
 void init_cache(void) {
+	redis_mutex = scm_make_mutex();
+	scm_c_define("redis-mutex", redis_mutex);
 	redis_port = DEFAULT_REDIS_PORT;
 	redis_connect();
 	make_node_tag = scm_make_smob_type("make-node", sizeof(MAKE_NODE));
