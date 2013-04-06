@@ -358,26 +358,28 @@ static SCM dispatch(void *data) {
 			mark = pt + 1;
 			}
 		}
+	cookie_header = SCM_EOL;
 	if ((handler = find_handler(request)) == SCM_BOOL_F) {
 		handler = scm_c_eval_string("not-found");
 		}
-	cookie_header = SCM_EOL;
-	if ((cookie = session_cookie(request)) == NULL) {
-		char buf[128];
-		cookie = (char *)malloc(33);
-		put_uuid(cookie);
-		sprintf(buf, "%s=%s; Path=/", COOKIE_KEY, cookie);
-		cookie_header = scm_cons(scm_from_locale_string("set-cookie"),
-			scm_from_locale_string(buf));
+	else {
+		if ((cookie = session_cookie(request)) == NULL) {
+			char buf[128];
+			cookie = (char *)malloc(33);
+			put_uuid(cookie);
+			sprintf(buf, "%s=%s; Path=/", COOKIE_KEY, cookie);
+			cookie_header = scm_cons(scm_from_locale_string("set-cookie"),
+				scm_from_locale_string(buf));
+			}
+		if (get_session(cookie) == SCM_BOOL_F) {
+			SCM session;
+			session = SCM_EOL;
+			session = scm_acons(makesym("_NEW_"), SCM_BOOL_T, session);
+			put_session(cookie, session);
+			}
+		request = scm_acons(makesym("session"),
+						scm_take_locale_string(cookie), request);
 		}
-	if (get_session(cookie) == SCM_BOOL_F) {
-		SCM session;
-		session = SCM_EOL;
-		session = scm_acons(makesym("_NEW_"), SCM_BOOL_T, session);
-		put_session(cookie, session);
-		}
-	request = scm_acons(makesym("session"),
-					scm_take_locale_string(cookie), request);
 /*scm_call_1(scm_c_eval_string("display"), request);
 scm_call_0(scm_c_eval_string("newline"));*/
 	reply = scm_call_1(handler, request);
