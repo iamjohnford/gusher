@@ -53,6 +53,7 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 	table = (struct template_slot *)malloc(
 				sizeof(struct template_slot) * tabsize);
 	i = 0;
+	pair = SCM_EOL;
 	for (node = slots; node != SCM_EOL; node = SCM_CDR(node)) {
 		pair = SCM_CAR(node);
 		table[i].token = upcase(scm_to_locale_string(
@@ -100,7 +101,15 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 		free(table[i].payload);
 		}
 	free(table);
-	return scm_string_concatenate(scm_reverse(parts));
+	//SCM node, pair, parts, slot_mark, slot_end;
+	SCM whole;
+	whole = scm_string_concatenate(scm_reverse(parts));
+	scm_remember_upto_here_2(parts, slot_mark);
+	scm_remember_upto_here_2(node, pair);
+	scm_remember_upto_here_2(slot_end, template);
+	scm_remember_upto_here_2(partial, slots);
+	scm_remember_upto_here_1(whole);
+	return whole;
 	}
 
 void init_template(void) {
