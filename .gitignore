@@ -1,6 +1,7 @@
 *.o
 gusher
 *~
+*.swp
 Makefile
 .deps
 config.log
