@@ -44,6 +44,7 @@ SCM log_msg_scm(SCM message) {
 	msg = scm_to_locale_string(message);
 	log_msg("%s\n", msg);
 	free(msg);
+	scm_remember_upto_here_1(message);
 	return SCM_BOOL_T;
 	}
 

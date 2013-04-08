@@ -38,12 +38,12 @@ static char *upcase(char *src) {
 	}
 
 static SCM fill_template(SCM template, SCM partial, SCM slots) {
-	char *master;
 	SCM node, pair, parts, slot_mark, slot_end;
 	struct template_slot *table;
-	char *pin, *sense, hold;
+	char *pin, *sense, hold, *master;
 	int marklen, tabsize, i;
 	master = scm_to_locale_string(template);
+	scm_remember_upto_here_1(template);
 	pin = master;
 	parts = SCM_EOL;
 	slot_mark = SCM_EOL;
@@ -61,6 +61,8 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 		table[i].payload = scm_to_locale_string(SCM_CDR(pair));
 		i++;
 		}
+	scm_remember_upto_here_2(node, pair);
+	scm_remember_upto_here_1(slots);
 	while (1) {
 		if ((sense = strstr(pin, SLOT_MARK)) == NULL) {
 			parts = scm_cons(c2s(pin), parts);
@@ -105,9 +107,8 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 	SCM whole;
 	whole = scm_string_concatenate(scm_reverse(parts));
 	scm_remember_upto_here_2(parts, slot_mark);
-	scm_remember_upto_here_2(node, pair);
-	scm_remember_upto_here_2(slot_end, template);
-	scm_remember_upto_here_2(partial, slots);
+	scm_remember_upto_here_1(slot_end);
+	scm_remember_upto_here_1(partial);
 	scm_remember_upto_here_1(whole);
 	return whole;
 	}

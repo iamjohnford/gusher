@@ -177,6 +177,7 @@ static void parse_header(char *line, int reqline, SCM *request) {
 			qstring = scm_from_locale_string("");
 			}
 		addlist(*request, sym_string("url-path", mark));
+//printf("URL: %s\n", mark);
 		addlist(*request, scm_cons(makesym("query-string"),
 				qstring));
 		addlist(*request, scm_cons(makesym("query"), query));
@@ -198,6 +199,7 @@ static SCM default_not_found(SCM request) {
 				headers);
 	resp = scm_cons(headers, resp);
 	resp = scm_cons(scm_from_locale_string("404 Not Found"), resp);
+	scm_remember_upto_here_2(resp, headers);
 	return resp;
 	}
 
@@ -209,6 +211,7 @@ static SCM find_handler(SCM request) {
 					== SCM_BOOL_F)
 		return SCM_BOOL_F;
 	spath = scm_to_locale_string(path);
+	scm_remember_upto_here_1(path);
 	for (pt = handlers; pt != NULL; pt = pt->link) {
 		if (strncmp(pt->path, spath, strlen(pt->path)) == 0) {
 			free(spath);
@@ -316,15 +319,18 @@ struct tframe {
 	int conn;
 	char ipaddr[32];
 	int rport;
+	int count;
 	};
 
 static SCM dispatch(void *data) {
 	struct tframe *frame;
 	char *hname, *hvalue, *body, *status, *cookie;
-	int conn, reqline, eoh, n;
+	int conn, reqline, eoh, n, count;
 	SCM request, reply, handler, headers, pair, val, cookie_header;
 	char *mark, *pt, buf[65536], sbuf[256];
 	frame = (struct tframe *)data;
+	count = frame->count;
+//printf("ENTER %d\n", count);
 	conn = frame->conn;
 	request = SCM_EOL;
 	addlist(request, sym_string("remote-host", frame->ipaddr));
@@ -386,6 +392,7 @@ scm_call_0(scm_c_eval_string("newline"));*/
 	status = scm_buf_string(SCM_CAR(reply), buf, sizeof(buf));
 	sprintf(sbuf, "HTTP/1.1 %s\r\n", status);
 	send_all(conn, sbuf);
+//printf("%s", sbuf);
 	reply = SCM_CDR(reply);
 	headers = SCM_CAR(reply);
 	val = pair = SCM_EOL;
@@ -396,6 +403,7 @@ scm_call_0(scm_c_eval_string("newline"));*/
 		hname = scm_buf_string(SCM_CAR(pair), buf, sizeof(buf));
 		send_all(conn, hname);
 		send_all(conn, ": ");
+//printf("%s: ", hname);
 		val = SCM_CDR(pair);
 		if (scm_is_string(val))
 			hvalue = scm_buf_string(val, buf, sizeof(buf));
@@ -409,6 +417,7 @@ scm_call_0(scm_c_eval_string("newline"));*/
 		else strcpy(hvalue = buf, "foobar");
 		send_all(conn, hvalue);
 		send_all(conn, "\r\n");
+//printf("%s\n", hvalue);
 		headers = SCM_CDR(headers);
 		}
 	send_all(conn, "\r\n");
@@ -416,11 +425,13 @@ scm_call_0(scm_c_eval_string("newline"));*/
 	body = scm_to_locale_string(SCM_CAR(reply));
 	send_all(conn, body);
 	free(body);
+//printf("SEND BODY\n");
 	close(conn);
 	scm_remember_upto_here_2(request, headers);
 	scm_remember_upto_here_2(reply, handler);
 	scm_remember_upto_here_1(cookie_header);
 	scm_remember_upto_here_2(pair, val);
+//printf("LEAVE %d\n", count);
 	return SCM_BOOL_T;
 	}
 
@@ -531,6 +542,7 @@ static void process_line(int fd) {
 	}
 
 static int threading;
+static int tcount = 0;
 
 static void process_http(int sock) {
 	socklen_t size;
@@ -541,10 +553,14 @@ static void process_http(int sock) {
 	frame->conn = accept(sock, (struct sockaddr *)&client, &size);
 	strcpy(frame->ipaddr, inet_ntoa(client.sin_addr));
 	frame->rport = ntohs(client.sin_port);
+	frame->count = tcount;
+//printf("DISPATCH %d\n", tcount);
 	if (threading) {
 		scm_spawn_thread(dispatch, (void *)frame, NULL, NULL);
 		}
 	else dispatch((void *)frame);
+//printf("RETURN %d\n", tcount);
+	tcount++;
 	return;
 	}
 
