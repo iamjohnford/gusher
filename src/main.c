@@ -96,6 +96,7 @@ static SCM set_handler(SCM path, SCM lambda) {
 	for (i = 0; i < count; i++) list[i]->link = list[i + 1];
 	list[count]->link = NULL;
 	free(list);
+	scm_remember_upto_here_2(path, lambda);
 	return SCM_UNSPECIFIED;
 	}
 
@@ -154,6 +155,7 @@ static SCM parse_query(char *query) {
 		if (next == NULL) break;
 		mark = next;
 		}
+	scm_remember_upto_here_1(list);
 	return list;
 	}
 
@@ -181,6 +183,7 @@ static void parse_header(char *line, int reqline, SCM *request) {
 		addlist(*request, scm_cons(makesym("query-string"),
 				qstring));
 		addlist(*request, scm_cons(makesym("query"), query));
+		scm_remember_upto_here_2(query, qstring);
 		return;
 		}
 	mark = index(line, ':');
@@ -207,11 +210,10 @@ static SCM find_handler(SCM request) {
 	char *spath;
 	SCM path;
 	struct handler_entry *pt;
-	if ((path = scm_assq_ref(request, makesym("url-path")))
-					== SCM_BOOL_F)
-		return SCM_BOOL_F;
+	path = scm_assq_ref(request, makesym("url-path"));
+	if (path == SCM_BOOL_F) return SCM_BOOL_F;
 	spath = scm_to_locale_string(path);
-	scm_remember_upto_here_1(path);
+	scm_remember_upto_here_2(path, request);
 	for (pt = handlers; pt != NULL; pt = pt->link) {
 		if (strncmp(pt->path, spath, strlen(pt->path)) == 0) {
 			free(spath);
@@ -254,6 +256,8 @@ static SCM simple_http_response(SCM mime_type, SCM content) {
 	addlist(resp, content);
 	addlist(resp, headers);
 	addlist(resp, scm_from_locale_string("200 OK"));
+	scm_remember_upto_here_2(headers, resp);
+	scm_remember_upto_here_2(mime_type, content);
 	return resp;
 	}
 
@@ -261,6 +265,7 @@ static SCM json_http_response(SCM enc_content) {
 	SCM headers, resp;
 	char *buf, clen[16];
 	buf = scm_to_locale_string(enc_content);
+	scm_remember_upto_here_1(enc_content);
 	sprintf(clen, "%ld", strlen(buf));
 	free(buf);
 	headers = SCM_EOL;
@@ -274,6 +279,7 @@ static SCM json_http_response(SCM enc_content) {
 	addlist(resp, enc_content);
 	addlist(resp, headers);
 	addlist(resp, scm_from_locale_string("200 OK"));
+	scm_remember_upto_here_2(headers, resp);
 	return resp;
 	}
 
@@ -286,6 +292,7 @@ static char *session_cookie(SCM request) {
 	if (dough == SCM_BOOL_F) return NULL;
 	key = NULL;
 	buf = scm_to_locale_string(dough);
+	scm_remember_upto_here_2(dough, request);
 	if (regexec(&cookie_pat, buf, 2, match, 0) == 0) {
 		len = match[1].rm_eo - match[1].rm_so;
 		key = (char *)malloc(len + 1);
@@ -325,11 +332,11 @@ struct tframe {
 static SCM dispatch(void *data) {
 	struct tframe *frame;
 	char *hname, *hvalue, *body, *status, *cookie;
-	int conn, reqline, eoh, n, count;
+	int conn, reqline, eoh, n; //, count;
 	SCM request, reply, handler, headers, pair, val, cookie_header;
 	char *mark, *pt, buf[65536], sbuf[256];
 	frame = (struct tframe *)data;
-	count = frame->count;
+	//count = frame->count;
 //printf("ENTER %d\n", count);
 	conn = frame->conn;
 	request = SCM_EOL;
@@ -382,6 +389,7 @@ static SCM dispatch(void *data) {
 			session = SCM_EOL;
 			session = scm_acons(makesym("_NEW_"), SCM_BOOL_T, session);
 			put_session(cookie, session);
+			scm_remember_upto_here_1(session);
 			}
 		request = scm_acons(makesym("session"),
 						scm_take_locale_string(cookie), request);
@@ -441,6 +449,8 @@ static SCM err_handler(SCM key, SCM rest) {
 	newline = scm_c_eval_string("newline");
 	scm_call_1(display, rest);
 	scm_call_0(newline);
+	scm_remember_upto_here_2(display, newline);
+	scm_remember_upto_here_2(key, rest);
 	return SCM_UNSPECIFIED;
 	}
 
@@ -494,6 +504,7 @@ static SCM body_proc(void *data) {
 	if (obj == SCM_UNSPECIFIED) return SCM_BOOL_T;
 	scm_call_1(scm_c_eval_string("write"), obj);
 	scm_call_0(scm_c_eval_string("newline"));
+	scm_remember_upto_here_1(obj);
 	return SCM_BOOL_T;
 	}
 

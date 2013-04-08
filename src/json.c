@@ -32,7 +32,7 @@ static char *make_key(SCM obj) {
 
 static json_t *json_build(SCM obj) {
 	json_t *jobj;
-	SCM node, pair;
+	SCM node;
 	char *buf;
 	if (scm_is_string(obj)) {
 		buf = scm_to_locale_string(obj);
@@ -55,6 +55,8 @@ static json_t *json_build(SCM obj) {
 	else if ((scm_list_p(obj) == SCM_BOOL_T) &&
 			(scm_pair_p(SCM_CAR(obj)) == SCM_BOOL_T)) {
 		char *key;
+		SCM pair;
+		pair = SCM_EOL;
 		jobj = json_object();
 		for (node = obj; node != SCM_EOL; node = SCM_CDR(node)) {
 			pair = SCM_CAR(node);
@@ -63,6 +65,7 @@ static json_t *json_build(SCM obj) {
 					json_build(SCM_CDR(pair)));
 			free(key);
 			}
+		scm_remember_upto_here_1(pair);
 		}
 	else if (scm_list_p(obj) == SCM_BOOL_T) {
 		jobj = json_array();
@@ -71,6 +74,7 @@ static json_t *json_build(SCM obj) {
 					json_build(SCM_CAR(node)));
 		}
 	else jobj = json_null();
+	scm_remember_upto_here_2(obj, node);
 	return jobj;
 	}
 
@@ -79,6 +83,7 @@ SCM json_encode(SCM obj) {
 	int n;
 	json_t *root;
 	root = json_build(obj);
+	scm_remember_upto_here_1(obj);
 	buf = json_dumps(root, JSON_COMPACT);
 	if ((n = root->refcount) > 0)
 		while (n--) json_decref(root);
@@ -93,7 +98,8 @@ static SCM parse(json_t *obj) {
 	size_t n, i;
 	const char *key;
 	json_t *val;
-	SCM list, sym;
+	SCM list;
+	list = SCM_EOL;
 	if (json_is_string(obj))
 		return scm_from_locale_string(json_string_value(obj));
 	if (json_is_integer(obj))
@@ -112,13 +118,17 @@ static SCM parse(json_t *obj) {
 		return list;
 		}
 	if (json_is_object(obj)) {
+		SCM sym;
 		list = SCM_EOL;
+		sym = SCM_EOL;
 		json_object_foreach(obj, key, val) {
 			sym = scm_from_locale_symbol(key);
 			list = scm_acons(sym, parse(val), list);
 			}
+		scm_remember_upto_here_1(sym);
 		return list;
 		}
+	scm_remember_upto_here_1(list);
 	return SCM_BOOL_F;
 	}
 
@@ -127,6 +137,7 @@ SCM json_decode(SCM string) {
 	json_t *root;
 	json_error_t err;
 	buf = scm_to_locale_string(string);
+	scm_remember_upto_here_1(string);
 	root = json_loads(buf, 0, &err);
 	free(buf);
 	if (root == NULL) return SCM_BOOL_F;

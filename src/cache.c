@@ -65,6 +65,7 @@ static void invalidate(MAKE_NODE *node) {
 		invalidate((MAKE_NODE *)SCM_SMOB_DATA(SCM_CAR(cursor)));
 		cursor = SCM_CDR(cursor);
 		}
+	scm_remember_upto_here_1(cursor);
 	return;
 	}
 

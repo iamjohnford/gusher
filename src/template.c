@@ -95,6 +95,7 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 			parts = scm_cons(c2s(pin), parts);
 			parts = scm_cons(slot_end, parts);
 			}
+		scm_remember_upto_here_1(partial);
 		pin = sense + marklen;
 		}
 	free(master);
@@ -103,12 +104,10 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 		free(table[i].payload);
 		}
 	free(table);
-	//SCM node, pair, parts, slot_mark, slot_end;
 	SCM whole;
 	whole = scm_string_concatenate(scm_reverse(parts));
 	scm_remember_upto_here_2(parts, slot_mark);
 	scm_remember_upto_here_1(slot_end);
-	scm_remember_upto_here_1(partial);
 	scm_remember_upto_here_1(whole);
 	return whole;
 	}

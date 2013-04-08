@@ -144,6 +144,7 @@ static SCM join_strings(SCM list, int trim) {
 		free(buf);
 		}
 	else joined = scm_take_locale_string(buf);
+	scm_remember_upto_here_1(joined);
 	return joined;
 	}
 
@@ -218,6 +219,7 @@ static SCM process_body(SCM headers, SCM body) {
 	ctype = scm_assq_ref(headers, symbol("content-type"));
 	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
 	stype = scm_to_locale_string(ctype);
+	scm_remember_upto_here_1(ctype);
 	if (match(stype, "text/json") ||
 			match(stype, "application/json") ||
 			match(stype, "application/javascript"))

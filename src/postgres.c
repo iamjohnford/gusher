@@ -140,7 +140,7 @@ static SCM pg_decode(char *string, int dtype) {
 static SCM build_row(struct pg_res *pgr) {
 	SCM row, fnode, pair, value, tnode;
 	int i;
-	row = SCM_EOL;
+	row = pair = value = SCM_EOL;
 	fnode = pgr->fields;
 	tnode = pgr->types;
 	for (i = 0; i < pgr->nfields; i++) {
@@ -156,6 +156,8 @@ static SCM build_row(struct pg_res *pgr) {
 		fnode = SCM_CDR(fnode);
 		tnode = SCM_CDR(tnode);
 		}
+	scm_remember_upto_here_2(row, value);
+	scm_remember_upto_here_1(pair);
 	return row;
 	}
 
@@ -167,7 +169,7 @@ static SCM pg_get_row(SCM res) {
 	if (pgr->cursor >= pgr->tuples) return SCM_BOOL_F;
 	row = build_row(pgr);
 	pgr->cursor++;
-	scm_remember_upto_here_1(res);
+	scm_remember_upto_here_2(res, row);
 	return row;
 	}
 
@@ -267,6 +269,7 @@ static SCM pg_format_sql(SCM conn, SCM obj) {
 		}
 	else if (scm_is_null(obj)) out = c2s("NULL");
 	else out = c2s("NULL");
+	scm_remember_upto_here_1(out);
 	return out;
 	}
 

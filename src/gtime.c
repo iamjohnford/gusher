@@ -83,10 +83,12 @@ SCM format_time(SCM time, SCM format) {
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	fmt = scm_to_locale_string(format);
+	scm_remember_upto_here_1(format);
 	strftime(buf, 256, (const char *)fmt, &(gtime->time));
 	scm_remember_upto_here_1(time);
 	ftime = scm_from_locale_string(buf);
 	free(fmt);
+	scm_remember_upto_here_1(ftime);
 	return ftime;
 	}
 
