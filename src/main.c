@@ -76,6 +76,7 @@ static SCM threads;
 static SCM qmutex;
 static SCM pmutex;
 static SCM qcondvar;
+static SCM not_found;
 static int nthreads = 0;
 static int busy_threads = 0;
 static int threading;
@@ -234,7 +235,7 @@ static SCM find_handler(SCM request) {
 	path = scm_assq_ref(request, makesym("url-path"));
 	if (path == SCM_BOOL_F) return SCM_BOOL_F;
 	spath = scm_to_locale_string(path);
-	scm_remember_upto_here_2(path, request);
+	scm_remember_upto_here_1(path);
 	for (pt = handlers; pt != NULL; pt = pt->link) {
 		if (strncmp(pt->path, spath, strlen(pt->path)) == 0) {
 			free(spath);
@@ -615,12 +616,12 @@ static void send_headers(SCM headers, int sock) {
 
 static SCM run_responder(SCM request) {
 	SCM cookie_header = SCM_BOOL_F;
-	//SCM handler;
+	SCM handler;
 	//char *cookie;
-	/*if ((handler = find_handler(request)) == SCM_BOOL_F) {
-		handler = scm_c_eval_string("not-found");
+	if ((handler = find_handler(request)) == SCM_BOOL_F) {
+		handler = not_found;
 		}
-	else {
+	/*else {
 		if ((cookie = session_cookie(request)) == NULL) {
 			char buf[128];
 			cookie = (char *)malloc(33);
@@ -639,7 +640,7 @@ static SCM run_responder(SCM request) {
 		request = scm_acons(makesym("session"),
 						scm_take_locale_string(cookie), request);
 		}*/
-	SCM reply = dump_request(request);
+	SCM reply = scm_call_1(handler, request);
 	reply = scm_cons(cookie_header, reply);
 	scm_remember_upto_here_1(request);
 	scm_remember_upto_here_1(cookie_header);
@@ -769,7 +770,9 @@ static void init_env(void) {
 	int n;
 	struct stat bstat;
 	scm_c_define_gsubr("http", 2, 0, 0, set_handler);
-	scm_c_define_gsubr("not-found", 1, 0, 0, default_not_found);
+	//scm_c_define_gsubr("not-found", 1, 0, 0, default_not_found);
+	scm_c_define_gsubr("not-found", 1, 0, 0, dump_request);
+	not_found = scm_c_eval_string("not-found");
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
 	scm_c_define_gsubr("err-handler", 1, 0, 1, err_handler);
 	scm_c_define_gsubr("simple-response", 2, 0, 0, simple_http_response);
