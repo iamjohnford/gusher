@@ -755,14 +755,11 @@ static void add_thread() {
 	if (nthreads >= MAX_THREADS) return;
 	thread = scm_spawn_thread(dispatcher, NULL, NULL, NULL);
 	threads = scm_cons(thread, threads);
+	scm_c_define("responders", threads);
 	nthreads++;
 printf("ADD THREAD: %d\n", nthreads);
+	scm_remember_upto_here_2(thread, threads);
 	return;
-	}
-
-static SCM sigq() {
-	scm_signal_condition_variable(qcondvar);
-	return SCM_BOOL_T;
 	}
 
 static void init_env(void) {
@@ -777,12 +774,10 @@ static void init_env(void) {
 	scm_c_define_gsubr("err-handler", 1, 0, 1, err_handler);
 	scm_c_define_gsubr("simple-response", 2, 0, 0, simple_http_response);
 	scm_c_define_gsubr("json-response", 1, 0, 0, json_http_response);
-	scm_c_define_gsubr("sigq", 0, 0, 0, sigq);
 	scm_c_define("responders", threads = SCM_EOL);
 	scm_c_define("qmutex", qmutex = scm_make_mutex());
 	scm_c_define("pmutex", pmutex = scm_make_mutex());
 	scm_c_define("qcondvar", qcondvar = scm_make_condition_variable());
-	scm_c_define("threads", SCM_EOL);
 	sprintf(pats, "%s=([0-9a-f]+)", COOKIE_KEY);
 	regcomp(&cookie_pat, pats, REG_EXTENDED);
 	init_postgres();
