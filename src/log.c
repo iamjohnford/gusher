@@ -23,11 +23,13 @@
 
 static FILE *logfile;
 static char *logpath = NULL;
+static SCM lmutex;
 
 void log_msg(const char *format, ...) {
 	va_list args;
 	time_t now;
 	struct tm *lt;
+	scm_lock_mutex(lmutex);
 	now = time(NULL);
 	lt = localtime(&now);
 	fprintf(logfile, "%d/%02d/%02d %02d:%02d:%02d ",
@@ -36,6 +38,8 @@ void log_msg(const char *format, ...) {
 	va_start(args, format);
 	vfprintf(logfile, format, args);
 	va_end(args);
+	fflush(logfile);
+	scm_unlock_mutex(lmutex);
 	return;
 	}
 
@@ -66,6 +70,7 @@ void init_log() {
 	logfile = stderr;
 	scm_c_define_gsubr("log-to", 1, 0, 0, log_to);
 	scm_c_define_gsubr("log-msg", 1, 0, 0, log_msg_scm);
+	scm_permanent_object(lmutex = scm_make_mutex());
 	}
 
 void shutdown_log() {
