@@ -76,7 +76,6 @@ static const char *hex = "0123456789abcdef";
 static SCM threads;
 static SCM qmutex;
 static SCM pmutex;
-static SCM qcondvar;
 static SCM qcondvars;
 static SCM scm_handlers;
 static int nthreads = 0;
@@ -182,40 +181,7 @@ static SCM parse_query(char *query) {
 	scm_remember_upto_here_1(list);
 	return list;
 	}
-/*
-static void parse_header(char *line, int reqline, SCM *request) {
-	SCM value, query, qstring;
-	char *mark, *pt;
-	if (reqline) {
-		if (line[0] == 'G') value = makesym("get");
-		else value = makesym("post");
-		addlist(*request, scm_cons(makesym("method"), value));
-		mark = index(line, ' ') + 1;
-		*(index(mark, ' ')) = '\0';
-		addlist(*request, sym_string("url", mark));
-		if ((pt = index(mark, '?')) != NULL) {
-			*pt++ = '\0';
-			qstring = scm_from_locale_string(pt);
-			query = parse_query(pt);
-			}
-		else {
-			query = SCM_EOL;
-			qstring = scm_from_locale_string("");
-			}
-		addlist(*request, sym_string("url-path", mark));
-//printf("URL: %s\n", mark);
-		addlist(*request, scm_cons(makesym("query-string"),
-				qstring));
-		addlist(*request, scm_cons(makesym("query"), query));
-		scm_remember_upto_here_2(query, qstring);
-		return;
-		}
-	mark = index(line, ':');
-	*mark++ = '\0';
-	while (isblank(*mark)) mark++;
-	addlist(*request, sym_string(downcase(line), mark));
-	}
-*/
+
 static SCM default_not_found(SCM request) {
 	SCM resp, headers;
 	resp = SCM_EOL;
@@ -240,26 +206,22 @@ static SCM find_handler(SCM request) {
 	scm_remember_upto_here_1(path);
 	for (pt = handlers; pt != NULL; pt = pt->link) {
 		if (strncmp(pt->path, spath, strlen(pt->path)) == 0) {
-//printf("found handler %s\n", spath);
 			free(spath);
 			return pt->handler;
 			}
 		}
-//printf("no handler for %s\n", spath);
 	free(spath);
 	return SCM_BOOL_F;
 	}
 
-static void send_all(int sock, const char *msg, int *check) {
+static void send_all(int sock, const char *msg) {
 	int sent, len, n;
-	if (!(*check)) return;
 	sent = 0;
 	len = strlen(msg);
 	while (sent < len) {
 		n = send(sock, msg + sent, len - sent, 0);
 		if (n < 0) {
-			perror("send! ");
-			*check = 0;
+			perror("send!");
 			break;
 			}
 		sent += n;
@@ -356,14 +318,10 @@ static RFRAME *get_frame() {
 	RFRAME *frame;
 	if (!threading) return &one_frame;
 	scm_lock_mutex(pmutex);
-	if (req_pool == NULL) {
-		frame = (RFRAME *)malloc(sizeof(RFRAME));
-//printf("ALLOC FRAME %08lx\n", (unsigned long)frame);
-		}
+	if (req_pool == NULL) frame = (RFRAME *)malloc(sizeof(RFRAME));
 	else {
 		frame = req_pool;
 		req_pool = frame->next;
-//printf("REUSE FRAME %08lx\n", (unsigned long)frame);
 		}
 	scm_unlock_mutex(pmutex);
 	return frame;
@@ -377,121 +335,7 @@ static void release_frame(RFRAME *frame) {
 	scm_unlock_mutex(pmutex);
 	return;
 	}
-/*
-static SCM dispatch(void *data) {
-	struct rframe *frame;
-	char *hname, *hvalue, *body, *status, *cookie;
-	int conn, reqline, eoh, n, count;
-	SCM request, reply, handler, headers, pair, val, cookie_header;
-	char *mark, *pt, buf[65536], sbuf[256];
-	frame = (struct rframe *)data;
-count = frame->count;
-printf("ENTER %d\n", count);
-	conn = frame->sock;
-	request = SCM_EOL;
-	addlist(request, sym_string("remote-host", frame->ipaddr));
-	addlist(request, scm_cons(makesym("remote-port"),
-		scm_from_signed_integer(frame->rport)));
-	free(frame);
-	reqline = 1;
-	eoh = 0;
-	while (!eoh) {
-		n = recv(conn, buf, sizeof(buf), 0);
-		if (n == 0) {
-			log_msg("peer closed connection\n");
-			close(conn);
-			return SCM_BOOL_F;
-			}
-		if (n < 0) {
-			log_msg("bad recv: %s\n", strerror(errno));
-			close(conn);
-			return SCM_BOOL_F;
-			}
-		mark = buf;
-		while ((pt = index(mark, '\n')) != NULL) {
-			*pt = '\0';
-			if (*(pt - 1) == '\r') *(pt - 1) = '\0';
-			if (strlen(mark) == 0) {
-				eoh = 1;
-				break;
-				}
-			parse_header(mark, reqline, &request);
-			reqline = 0;
-			mark = pt + 1;
-			}
-		}
-	cookie_header = SCM_EOL;
-	if ((handler = find_handler(request)) == SCM_BOOL_F) {
-		handler = scm_c_eval_string("not-found");
-		}
-	else {
-		if ((cookie = session_cookie(request)) == NULL) {
-			char buf[128];
-			cookie = (char *)malloc(33);
-			put_uuid(cookie);
-			sprintf(buf, "%s=%s; Path=/", COOKIE_KEY, cookie);
-			cookie_header = scm_cons(scm_from_locale_string("set-cookie"),
-				scm_from_locale_string(buf));
-			}
-		if (get_session(cookie) == SCM_BOOL_F) {
-			SCM session;
-			session = SCM_EOL;
-			session = scm_acons(makesym("_NEW_"), SCM_BOOL_T, session);
-			put_session(cookie, session);
-			scm_remember_upto_here_1(session);
-			}
-		request = scm_acons(makesym("session"),
-						scm_take_locale_string(cookie), request);
-		}
-scm_call_1(scm_c_eval_string("display"), request);
-scm_call_0(scm_c_eval_string("newline"));
-	reply = scm_call_1(handler, request);
-	status = scm_buf_string(SCM_CAR(reply), buf, sizeof(buf));
-	sprintf(sbuf, "HTTP/1.1 %s\r\n", status);
-	send_all(conn, sbuf);
-printf("%s", sbuf);
-	reply = SCM_CDR(reply);
-	headers = SCM_CAR(reply);
-	val = pair = SCM_EOL;
-	if (cookie_header != SCM_EOL)
-		headers = scm_cons(cookie_header, headers);
-	while (headers != SCM_EOL) {
-		pair = SCM_CAR(headers);
-		hname = scm_buf_string(SCM_CAR(pair), buf, sizeof(buf));
-		send_all(conn, hname);
-		send_all(conn, ": ");
-printf("%s: ", hname);
-		val = SCM_CDR(pair);
-		if (scm_is_string(val))
-			hvalue = scm_buf_string(val, buf, sizeof(buf));
-		else if (scm_is_number(val))
-			hvalue = scm_buf_string(scm_number_to_string(val,
-										scm_from_int(10)),
-									buf, sizeof(buf));
-		else if (scm_is_symbol(val))
-			hvalue = scm_buf_string(scm_symbol_to_string(val),
-									buf, sizeof(buf));
-		else strcpy(hvalue = buf, "foobar");
-		send_all(conn, hvalue);
-		send_all(conn, "\r\n");
-printf("%s\n", hvalue);
-		headers = SCM_CDR(headers);
-		}
-	send_all(conn, "\r\n");
-	reply = SCM_CDR(reply);
-	body = scm_to_locale_string(SCM_CAR(reply));
-	send_all(conn, body);
-	free(body);
-printf("SEND BODY\n");
-	close(conn);
-	scm_remember_upto_here_2(request, headers);
-	scm_remember_upto_here_2(reply, handler);
-	scm_remember_upto_here_1(cookie_header);
-	scm_remember_upto_here_2(pair, val);
-printf("LEAVE %d\n", count);
-	return SCM_BOOL_T;
-	}
-*/
+
 static int mygetline(int fd, char *buf, size_t len) {
 	int n;
 	//n = recv(fd, buf, len, 0);
@@ -544,12 +388,10 @@ static SCM start_request(char *line) {
 	}
 
 static SCM dump_request(SCM request) {
-	//char buf[4096];
-	char *buf;
+	char buf[4096];
 	SCM node, pair;
 	char *ch;
 	pair = SCM_EOL;
-	buf = (char *)malloc(4096);
 	buf[0] = '\0';
 	if (threading)
 		strcat(buf, "threaded request received\r\n");
@@ -574,7 +416,6 @@ static SCM dump_request(SCM request) {
 	scm_remember_upto_here_2(node, pair);
 	SCM reply = SCM_EOL;
 	reply = scm_cons(scm_from_locale_string(buf), reply);
-	free(buf);
 	SCM headers = SCM_EOL;
 	headers = scm_acons(scm_from_locale_string("content-type"),
 				scm_from_locale_string("text/plain"), headers);
@@ -588,15 +429,13 @@ static void send_headers(int sock, SCM headers) {
 	SCM node, pair, val;
 	char buf[1024];
 	char *hname, *hvalue;
-	int check;
 	node = headers;
 	pair = val = SCM_EOL;
-	check = 1;
 	while (node != SCM_EOL) {
 		pair = SCM_CAR(node);
 		hname = scm_buf_string(SCM_CAR(pair), buf, sizeof(buf));
-		send_all(sock, hname, &check);
-		send_all(sock, ": ", &check);
+		send_all(sock, hname);
+		send_all(sock, ": ");
 //printf("%s: ", hname);
 		val = SCM_CDR(pair);
 		if (scm_is_string(val))
@@ -609,12 +448,12 @@ static void send_headers(int sock, SCM headers) {
 			hvalue = scm_buf_string(scm_symbol_to_string(val),
 									buf, sizeof(buf));
 		else strcpy(hvalue = buf, "foobar");
-		send_all(sock, hvalue, &check);
-		send_all(sock, "\r\n", &check);
+		send_all(sock, hvalue);
+		send_all(sock, "\r\n");
 //printf("%s\n", hvalue);
 		node = SCM_CDR(node);
 		}
-	send_all(sock, "\r\n", &check);
+	send_all(sock, "\r\n");
 	scm_remember_upto_here_2(node, pair);
 	return;
 	}
@@ -652,20 +491,15 @@ static SCM run_responder(SCM request) {
 	return reply;
 	}
 
-#define PRBUFSIZE 4096
-
 static void process_request(RFRAME *frame) {
-	//char buf[4096], sbuf[128];
-	char *buf;
+	char buf[4096];
 	size_t avail;
 	char *mark, *pt, *colon;
-	int eoh, sock, check;
+	int eoh, sock;
 	SCM request;
 	sock = frame->sock;
 	eoh = 0;
-	check = 1;
-	buf = (char *)malloc(PRBUFSIZE);
-	avail = PRBUFSIZE;
+	avail = sizeof(buf);
 	request = SCM_EOL;
 	while (!eoh) { // build request
 		if (!mygetline(sock, buf, avail)) break;
@@ -686,7 +520,7 @@ static void process_request(RFRAME *frame) {
 			pt = mark;
 			}
 		avail = pt - buf;
-		memmove((void *)buf, pt, PRBUFSIZE - avail);
+		memmove((void *)buf, pt, sizeof(buf) - avail);
 		}
 	request = scm_acons(makesym("remote-host"),
 					scm_from_locale_string(frame->ipaddr), request);
@@ -700,13 +534,9 @@ static void process_request(RFRAME *frame) {
 	SCM cookie_header = SCM_CAR(reply);
 	reply = SCM_CDR(reply);
 	//-----------------------
-	send_all(sock, "HTTP/1.1 ", &check);
-	send_all(sock, scm_buf_string(SCM_CAR(reply), buf, PRBUFSIZE), &check);
-	send_all(sock, "\r\n", &check);
-	//sprintf(sbuf, "HTTP/1.1 %s\r\n", 
-	//			scm_buf_string(SCM_CAR(reply), buf, sizeof(buf)));
-	//send_all(sock, sbuf); // status
-//printf("%s", sbuf);
+	send_all(sock, "HTTP/1.1 ");
+	send_all(sock, scm_buf_string(SCM_CAR(reply), buf, sizeof(buf)));
+	send_all(sock, "\r\n");
 	reply = SCM_CDR(reply);
 	SCM headers = SCM_CAR(reply);
 	if (cookie_header != SCM_BOOL_F)
@@ -714,11 +544,10 @@ static void process_request(RFRAME *frame) {
 	send_headers(sock, headers); // headers
 	reply = SCM_CDR(reply);
 	char *body = scm_to_locale_string(SCM_CAR(reply));
-	send_all(sock, body, &check); // body
+	send_all(sock, body); // body
 	free(body);
 //printf("SEND BODY\n");
 	close(sock);
-	free(buf);
 	scm_remember_upto_here_1(request);
 	scm_remember_upto_here_1(reply);
 	scm_remember_upto_here_1(headers);
@@ -739,21 +568,14 @@ printf("start thread %08lx\n", id);
 	qcondvars = scm_cons(condvar, qcondvars);
 	scm_gc_protect_object(qcondvars);
 	while (1) {
-//printf("lock\n");
 		SCM res;
 		scm_lock_mutex(qmutex);
-//printf("locked\n");
 		if (req_queue == NULL) {
-//printf("wait queue %08lx\n", id);
 			now = time(NULL) + 1;
 			res = scm_timed_wait_condition_variable(condvar, qmutex,
 						scm_from_unsigned_integer(now));
-					//scm_from_int(now));
-//printf("res: %08x (%08x)\n", res, SCM_BOOL_F);
 			if ((res == SCM_BOOL_F) && (req_queue == NULL)) {
-//printf("time out\n");
 				scm_unlock_mutex(qmutex);
-//printf("unlock\n");
 				continue;
 				}
 			}
@@ -765,11 +587,10 @@ printf("start thread %08lx\n", id);
 		req_queue = req_queue->next;
 		busy_threads++;
 		scm_unlock_mutex(qmutex);
-//printf("dequeue request %08lx\n", id);
 		process_request(frame);
-		/*scm_lock_mutex(qmutex);
+		//scm_lock_mutex(qmutex);
 		busy_threads--;
-		scm_unlock_mutex(qmutex);*/
+		//scm_unlock_mutex(qmutex);
 		}
 	return SCM_BOOL_T;
 	}
@@ -798,7 +619,6 @@ static void init_env(void) {
 	threads = SCM_EOL;
 	scm_permanent_object(qmutex = scm_make_mutex());
 	scm_permanent_object(pmutex = scm_make_mutex());
-	scm_permanent_object(qcondvar = scm_make_mutex());
 	qcondvars = SCM_EOL;
 	scm_handlers = SCM_EOL;
 	sprintf(pats, "%s=([0-9a-f]+)", COOKIE_KEY);
@@ -905,18 +725,6 @@ static void process_line(int fd) {
 	return;
 	}
 
-static void signal_threads() {
-	SCM node;
-	//scm_broadcast_condition_variable(qcondvar);
-	node = qcondvars;
-	while (node != SCM_EOL) {
-		scm_signal_condition_variable(SCM_CAR(node));
-		node = SCM_CDR(node);
-		}
-//printf("SIG\n");
-	return;
-	}
-
 static void enqueue_frame(RFRAME *frame) {
 	RFRAME *node;
 	int count, need_sig;
@@ -931,8 +739,14 @@ static void enqueue_frame(RFRAME *frame) {
 		count += 1;
 		node = node->next;
 		}
-//printf("qd frame %d\n", count);
-	if (need_sig) signal_threads();
+	if (need_sig) {
+		SCM node;
+		node = qcondvars;
+		while (node != SCM_EOL) {
+			scm_signal_condition_variable(SCM_CAR(node));
+			node = SCM_CDR(node);
+			}
+		}
 	scm_unlock_mutex(qmutex);
 	return;
 	}
@@ -948,15 +762,10 @@ static void process_http(int sock) {
 	frame->rport = ntohs(client.sin_port);
 	frame->count = tcount;
 	if (threading) {
-//printf("DISPATCH %d\n", tcount);
-		//if (busy_threads >= nthreads) add_thread();
+		if (busy_threads >= nthreads) add_thread();
 		enqueue_frame(frame);
-		//scm_signal_condition_variable(qcondvar);
-		//signal_threads();
-//printf("RETURN %d\n", tcount);
 		}
 	else {
-//printf("RUN SYNC\n");
 		process_request(frame);
 		}
 	tcount++;
@@ -988,7 +797,7 @@ static int http_socket(int port) {
 int main(int argc, char **argv) {
 	struct pollfd polls[3];
 	int opt, sock;
-	int fdin;
+	int fdin, nfds;
 	int http_port;
 	int background;
 	http_port = DEFAULT_PORT;
@@ -1044,12 +853,12 @@ int main(int argc, char **argv) {
 	if (threading) {
 		int n;
 		n = sysconf(_SC_NPROCESSORS_ONLN);
-		//n = 2;
 		while (n-- > 0) add_thread();
 		}
+	nfds = (background ? 2 : 3);
 	while (running) {  
-		if (poll(polls, 3, 3000) < 1) continue;
-		if (running == 0) break; // why?
+		if (poll(polls, nfds, 3000) < 1) continue;
+		//if (running == 0) break; // why?
 		if (polls[0].revents & POLLIN) process_http(sock);
 		if (polls[1].revents & POLLIN) process_inotify_event();
 		if (polls[2].revents & POLLIN) process_line(fdin);
