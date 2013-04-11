@@ -1,7 +1,7 @@
 gusher
 ======
 
-Gusher is a
+Gusher is a multi-threaded
 web application server written in C and embedding the
 GNU [Guile](http://www.gnu.org/software/guile/) extension environment
 to host applications written in
@@ -13,7 +13,7 @@ Features include:
 - basic [postgresql](http://www.postgresql.org/) interface for SQL
 database access
 
-- [Redis](http://redis.io/) for key-value storage
+- [Redis](http://redis.io/) for persistent key-value storage
 
 - http client implemented with [libcurl](http://curl.haxx.se/)
 
