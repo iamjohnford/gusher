@@ -36,6 +36,9 @@
 /* Define to 1 if you have the `pthread' library (-lpthread). */
 #undef HAVE_LIBPTHREAD
 
+/* Define to 1 if you have the `readline' library (-lreadline). */
+#undef HAVE_LIBREADLINE
+
 /* Define to 1 if you have the `uuid' library (-luuid). */
 #undef HAVE_LIBUUID
 

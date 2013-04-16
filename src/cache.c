@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <kclangc.h>
 
 #include "gnotify.h"
 #include "log.h"

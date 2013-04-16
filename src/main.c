@@ -54,6 +54,7 @@
 #define MAX_THREADS 32
 #define POLL_TIMEOUT 3000
 #define POLICE_INTVL 6
+#define DEFAULT_GUSHER_ROOT "/var/lib/gusher"
 
 struct handler_entry {
 	char *path;
@@ -636,7 +637,7 @@ static void init_env(void) {
 	here = getcwd(NULL, 0);
 	if (chdir(gusher_root) == 0) {
 		if (stat(BOOT_FILE, &bstat) == 0) {
-			log_msg("load %s\n", BOOT_FILE);
+			log_msg("load %s/%s\n", gusher_root, BOOT_FILE);
 			scm_c_primitive_load(BOOT_FILE);
 			}
 		chdir(here);
@@ -837,7 +838,8 @@ int main(int argc, char **argv) {
 	signal(SIGTERM, signal_handler);
 	signal(SIGABRT, signal_handler);
 	if (strlen(gusher_root) == 0) {
-		sprintf(gusher_root, "%s/gusher", LOCALLIB);
+		strcpy(gusher_root, DEFAULT_GUSHER_ROOT);
+		//sprintf(gusher_root, "%s/gusher", LOCALLIB);
 		}
 	sock = http_socket(http_port);
 	if (sock < 0) exit(1);
