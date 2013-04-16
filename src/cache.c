@@ -53,7 +53,6 @@ typedef struct make_node {
 typedef struct kvdb_node {
 	KCDB *db;
 	char *path;
-	struct kvdb_node *next;
 	} KVDB_NODE;
 
 typedef struct file_node {
@@ -62,16 +61,12 @@ typedef struct file_node {
 	struct file_node *next;
 	} FILE_NODE;
 
-static int redis_sock = -1;
-static int redis_port;
 static SCM file_sym;
 static SCM data_sym;
-static SCM redis_mutex;
 static FILE_NODE *file_nodes = NULL;
 static scm_t_bits make_node_tag;
 static scm_t_bits kvdb_node_tag;
 static SCM sessions_db;
-static KVDB_NODE *kvdbs = NULL;
 
 static void invalidate(MAKE_NODE *node) {
 	SCM cursor;
@@ -246,299 +241,109 @@ static SCM mark_node(SCM smob) {
 	return SCM_UNSPECIFIED;
 	}
 
-static void redis_connect(void) {
-	struct sockaddr_in remote;
-	redis_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	remote.sin_family = AF_INET;
-	inet_pton(AF_INET, "127.0.0.1",
-			(void *)(&(remote.sin_addr.s_addr)));
-	remote.sin_port = htons(redis_port);
-	if (connect(redis_sock, (struct sockaddr *)&remote,
-			sizeof(struct sockaddr)) < 0) {
-		close(redis_sock);
-		redis_sock = -1;
-		}
-	return;
+inline char *symstr(SCM key) {
+	if (scm_is_symbol(key))
+		return scm_to_locale_string(scm_symbol_to_string(key));
+	return scm_to_locale_string(key);
 	}
 
-static void chunk_send(const char *chunk) {
-	int len, sent, n;
-	len = strlen(chunk);
-	sent = 0;
-	while (sent < len) {
-		n = send(redis_sock, chunk + sent, len - sent, 0);
-		sent += n;
-		}
-	return;
-	}
-
-static void send_header(const char *cmd, int args) {
-	char buf[64];
-	sprintf(buf, "*%d\r\n$%ld\r\n%s\r\n", args + 1, strlen(cmd), cmd);
-	chunk_send(buf);
-	return;
-	}
-
-static void send_arg(const char *arg) {
-	char fmt[32];
-	sprintf(fmt, "$%ld\r\n", strlen(arg));
-	chunk_send(fmt);
-	chunk_send(arg);
-	chunk_send("\r\n");
-	return;
-	}
-
-static void getrline(char *buf) {
-	int i;
-	char c;
-	i = 0;
-	do {
-		recv(redis_sock, &c, 1, 0);
-		if (buf != NULL) buf[i++] = c;
-		} while (c != '\n');
-	if (buf != NULL) buf[i - 2] = '\0';
-	return;
-	}
-
-/*
-static char *redis_request(const char *cmd, char *response) {
-	int size;
-	char reply[1024];
-	chunk_send(cmd);
-	getrline(reply);
-	switch (reply[0]) {
-		case '+':
-		case '-':
-		case ':':
-			if (response == NULL)
-				response = (char *)malloc(strlen(reply) + 1);
-			strcpy(response, reply);
-			return response;
-		case '$':
-			size = atoi(&reply[1]);
-			if (size < 0) return NULL;
-			if (response == NULL)
-				response = (char *)malloc(size + 1);
-			recv(redis_sock, response, size, 0);
-			response[size] = '\0';
-			recv(redis_sock, reply, 2, 0);
-			return response;
-		case '*':
-			return response;
-		}
-	return response;
-	}
-*/
-
-static SCM redis_set(SCM key, SCM value) {
-	char *ckey, *cvalue;
-	if (redis_sock < 0) return SCM_BOOL_F;
-	scm_lock_mutex(redis_mutex);
-	send_header("SET", 2);
-	send_arg(ckey = scm_to_locale_string(key));
-	send_arg(cvalue = scm_to_locale_string(value));
-	free(ckey);
-	free(cvalue);
-	getrline(NULL);
-	scm_unlock_mutex(redis_mutex);
-	return SCM_BOOL_T;
-	}
-
-static int redis_hset_c(const char *key, const char *field,
-						const char *value) {
-	if (redis_sock < 0) return 0;
-	scm_lock_mutex(redis_mutex);
-	send_header("HSET", 3);
-	send_arg(key);
-	send_arg(field);
-	send_arg(value);
-	getrline(NULL);
-	scm_unlock_mutex(redis_mutex);
-	return 1;
-	}
-
-static SCM redis_hset(SCM key, SCM field, SCM value) {
-	char *ckey, *cfield, *cvalue;
+static SCM kv_set(SCM db, SCM key, SCM value) {
 	int res;
-	ckey = scm_to_locale_string(key);
-	cfield = scm_to_locale_string(field);
-	cvalue = scm_to_locale_string(value);
-	res = redis_hset_c(ckey, cfield, cvalue);
-	free(ckey);
-	free(cfield);
-	free(cvalue);
-	return (res ? SCM_BOOL_T : SCM_BOOL_F);
-	}
-
-static SCM redis_append(SCM key, SCM value) {
-	char *ckey, *cvalue;
-	if (redis_sock < 0) return SCM_BOOL_F;
-	scm_lock_mutex(redis_mutex);
-	send_header("APPEND", 2);
-	send_arg(ckey = scm_to_locale_string(key));
-	send_arg(cvalue = scm_to_locale_string(value));
-	free(ckey);
-	free(cvalue);
-	getrline(NULL);
-	scm_unlock_mutex(redis_mutex);
-	return SCM_BOOL_T;
-	}
-
-static SCM redis_get(SCM key) {
-	char *ckey;
-	char cmd[256], *value;
-	int size;
-	if (redis_sock < 0) return SCM_BOOL_F;
-	scm_lock_mutex(redis_mutex);
-	send_header("GET", 1);
-	send_arg(ckey = scm_to_locale_string(key));
-	free(ckey);
-	getrline(cmd);
-	if ((size = atoi(&cmd[1])) < 0) {
-		scm_unlock_mutex(redis_mutex);
-		return SCM_BOOL_F;
-		}
-	value = (char *)malloc(size + 1);
-	recv(redis_sock, value, size, 0);
-	value[size] = '\0';
-	recv(redis_sock, cmd, 2, 0);
-	SCM out = scm_take_locale_string(value);
-	scm_unlock_mutex(redis_mutex);
-	return out;
-	}
-
-static char *redis_hget_c(const char *key, const char *field) {
-	char cmd[256], *value;
-	int size;
-	if (redis_sock < 0) return NULL;
-	scm_lock_mutex(redis_mutex);
-	send_header("HGET", 2);
-	send_arg(key);
-	send_arg(field);
-	getrline(cmd);
-	if ((size = atoi(&cmd[1])) < 0) {
-		scm_unlock_mutex(redis_mutex);
-		return NULL;
-		}
-	value = (char *)malloc(size + 1);
-	recv(redis_sock, value, size, 0);
-	value[size] = '\0';
-	recv(redis_sock, cmd, 2, 0);
-	scm_unlock_mutex(redis_mutex);
-	return value;
-	}
-
-SCM get_session(const char *sesskey) {
-	char *value;
-	size_t vsiz;
-	SCM session;
-	value = kcdbget(sessions_db, sesskey, strlen(sesskey), &vsiz);
-	if (value == NULL) return SCM_BOOL_F;
-	session = json_decode(scm_from_locale_string(value));
-	kcfree(value);
-	return session;
+	char *skey, *sval;
+	KVDB_NODE *node;
+	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
+	skey = symstr(key);
+	sval = scm_to_locale_string(value);
+	res = kcdbset(node->db, skey, strlen(skey), sval, strlen(sval));
+	free(skey);
+	free(sval);
+	return (res == 0 ? SCM_BOOL_F : SCM_BOOL_T);
 	}
 
 SCM put_session(const char *sesskey, SCM table) {
-	int res;
-	char *buf;
-	buf = scm_to_locale_string(json_encode(table));
-	res = kcdbset(sessions_db, sesskey, strlen(sesskey),
-				buf, strlen(buf));
-	free(buf);
-	scm_remember_upto_here_1(table);
-	return (res == 0? SCM_BOOL_F : SCM_BOOL_T);
+	return kv_set(sessions_db, scm_from_locale_string(sesskey),
+						json_encode(table));
 	}
 
-static SCM redis_hget(SCM key, SCM field) {
-	char *ckey, *cfield, *value;
-	ckey = scm_to_locale_string(key);
-	cfield = scm_to_locale_string(field);
-	value = redis_hget_c(ckey, cfield);
-	free(ckey);
-	free(cfield);
-	if (value == NULL) return SCM_BOOL_F;
+static SCM kv_get(SCM db, SCM key) {
+	size_t vsiz;
+	char *skey, *value;
+	KVDB_NODE *node;
+	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
+	skey = symstr(key);
+	vsiz = kcdbcheck(node->db, skey, strlen(skey));
+	if (vsiz < 0) {
+		free(skey);
+		return SCM_BOOL_F;
+		}
+	value = (char *)malloc(vsiz + 1);
+	kcdbgetbuf(node->db, skey, strlen(skey), value, vsiz);
+	value[vsiz] = '\0';
+	free(skey);
 	return scm_take_locale_string(value);
 	}
 
-static SCM redis_get_file(SCM path) {
-	char *spath, *buf, cmd[12];
-	struct stat bstat;
-	SCM key, content;
-	int fd, n;
-	if (redis_sock < 0) return SCM_BOOL_F;
-	key = scm_from_locale_string(FILE_CACHE);
-	spath = scm_to_locale_string(path);
-	scm_lock_mutex(redis_mutex);
-	send_header("HEXISTS", 2);
-	send_arg(FILE_CACHE);
-	send_arg(spath);
-	getrline(cmd);
-	scm_unlock_mutex(redis_mutex);
-	if (atoi(&cmd[1]) == 1) {
-log_msg("load %s from cache\n", spath);
-		free(spath);
-		return redis_hget(key, path);
-		}
-	if (stat(spath, &bstat) != 0) {
-		free(spath);
-		perror("cache-get-file[1]");
+static SCM kv_exists(SCM db, SCM key) {
+	size_t vsiz;
+	char *skey;
+	KVDB_NODE *node;
+	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
+	skey = symstr(key);
+	vsiz = kcdbcheck(node->db, skey, strlen(skey));
+	free(skey);
+	return (vsiz >= 0 ? SCM_BOOL_T : SCM_BOOL_F);
+	}
+
+static SCM kv_count(SCM db) {
+	KVDB_NODE *node;
+	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
+	return scm_from_unsigned_integer(kcdbcount(node->db));
+	}
+
+static SCM kv_keys(SCM db) {
+	KVDB_NODE *node;
+	size_t n;
+	char **keys;
+	SCM list;
+	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
+	n = kcdbcount(node->db);
+	keys = (char **)malloc(sizeof(char *) * n);
+	n = kcdbmatchprefix(node->db, "", keys, n);
+	if (n < 0) {
+		free(keys);
 		return SCM_BOOL_F;
 		}
-	if ((fd = open(spath, O_RDONLY)) < 0) {
-		free(spath);
-		perror("cache-get-file[2]");
-		return SCM_BOOL_F;
+	list = SCM_EOL;
+	while(n > 0) {
+		n--;
+		list = scm_cons(scm_from_locale_string(keys[n]), list);
+		kcfree(keys[n]);
 		}
-	buf = (char *)malloc(bstat.st_size + 1);
-	n = read(fd, (void *)buf, bstat.st_size);
-	buf[n] = '\0';
-	close(fd);
-	content = scm_take_locale_string(buf);
-	redis_hset(key, path, content);
-log_msg("load %s from FS\n", spath);
-	free(spath);
-	scm_remember_upto_here_2(key, content);
-	scm_remember_upto_here_1(path);
-	return content;
+	free(keys);
+	scm_remember_upto_here_1(list);
+	return list;
 	}
 
-static SCM redis_del(SCM key) {
-	char *ckey;
-	char cmd[256];
-	if (redis_sock < 0) return SCM_BOOL_F;
-	scm_lock_mutex(redis_mutex);
-	send_header("DEL", 1);
-	send_arg(ckey = scm_to_locale_string(key));
-	free(ckey);
-	getrline(cmd);
-	scm_unlock_mutex(redis_mutex);
-	return scm_from_signed_integer(atoi(&cmd[1]));
+static SCM kv_del(SCM db, SCM key) {
+	KVDB_NODE *node;
+	int res;
+	char *skey;
+	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
+	skey = symstr(key);
+	res = kcdbremove(node->db, skey, strlen(skey));
+	free(skey);
+	return (res ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
-static SCM redis_exists(SCM key) {
-	char *ckey;
-	char cmd[256];
-	if (redis_sock < 0) return SCM_BOOL_F;
-	scm_lock_mutex(redis_mutex);
-	send_header("EXISTS", 1);
-	send_arg(ckey = scm_to_locale_string(key));
-	free(ckey);
-	getrline(cmd);
-	scm_unlock_mutex(redis_mutex);
-	return (atoi(&cmd[1]) == 1 ? SCM_BOOL_T : SCM_BOOL_F);
+SCM get_session(const char *sesskey) {
+	SCM val;
+	val = kv_get(sessions_db, scm_from_locale_string(sesskey));
+	if (val == SCM_BOOL_F) return SCM_BOOL_F;
+	scm_remember_upto_here_1(val);
+	return json_decode(val);
 	}
 
-static SCM redis_ping(void) {
-	char reply[64];
-	if (redis_sock < 0) return SCM_BOOL_F;
-	scm_lock_mutex(redis_mutex);
-	send_header("PING", 0);
-	getrline(reply);
-	scm_unlock_mutex(redis_mutex);
-	return (strcmp(reply, "+PONG") == 0 ? SCM_BOOL_T : SCM_BOOL_F);
-	}
-
+/*
 static SCM edit_watch_handler(SCM path, SCM mask) {
 	char *spath;
 	spath = scm_to_locale_string(path);
@@ -557,6 +362,7 @@ static SCM watch_edit(SCM dir) {
 	return add_watch(dir, scm_from_uint32(IN_CLOSE_WRITE),
 		scm_c_make_gsubr("edit_watch_handler", 2, 0, 0, edit_watch_handler));
 	}
+*/
 
 void police_cache(void) {
 	FILE_NODE *node;
@@ -574,27 +380,13 @@ void police_cache(void) {
 	return;
 	}
 
-void shutdown_cache(void) {
-	FILE_NODE *next;
-	while (file_nodes != NULL) {
-		next = file_nodes->next;
-		free(file_nodes);
-		file_nodes = next;
-		}
-	if (sessions_db != NULL) {
-		kcdbclose(sessions_db);
-		kcdbdel(sessions_db);
-		}
-	return;
-	}
-
-static SCM open_kvdb(SCM entry) {
+static SCM kv_open(SCM entry) {
 	static char path[PATH_MAX];
 	char *sentry;
 	KVDB_NODE *node;
 	KCDB *db;
 	sentry = scm_to_locale_string(entry);
-	sprintf(path, "%s/%s", KC_ROOT, sentry);
+	sprintf(path, "%s/%s.kch", KC_ROOT, sentry);
 	db = kcdbnew();
 	if (!kcdbopen(db, path, KCOWRITER | KCOCREATE)) {
 		log_msg("kv-open '%s': %s\n", sentry,
@@ -608,37 +400,61 @@ static SCM open_kvdb(SCM entry) {
 	node->db = db;
 	node->path = (char *)malloc(strlen(path) + 1);
 	strcpy(node->path, path);
-	node->next = kvdbs;
-	kvdbs = node;
 	chmod(path, 0664);
 	SCM_RETURN_NEWSMOB(kvdb_node_tag, node);
 	}
 
+static SCM kv_close(SCM kvdb) {
+	KVDB_NODE *node;
+	node = (KVDB_NODE *)SCM_SMOB_DATA(kvdb);
+	if (node->db != NULL) {
+		kcdbclose(node->db);
+		kcdbdel(node->db);
+		node->db = NULL;
+		}
+	if (node->path != NULL) {
+		free(node->path);
+		node->path = NULL;
+		}
+	return SCM_BOOL_T;
+	}
+
+static size_t free_kvdb(SCM smob) {
+	kv_close(smob);
+	return 0;
+	}
+
+void shutdown_cache(void) {
+	FILE_NODE *next;
+	while (file_nodes != NULL) {
+		next = file_nodes->next;
+		free(file_nodes);
+		file_nodes = next;
+		}
+	kv_close(sessions_db);
+	return;
+	}
+
 void init_cache(void) {
-	redis_mutex = scm_make_mutex();
-	scm_c_define("redis-mutex", redis_mutex);
-	redis_port = DEFAULT_REDIS_PORT;
-	redis_connect();
-	sessions_db = open_kvdb(scm_from_locale_string("sessions.kch"));
-	scm_gc_protect_object(sessions_db);
 	make_node_tag = scm_make_smob_type("make-node", sizeof(MAKE_NODE));
-	kvdb_node_tag = scm_make_smob_type("kvdb-node", sizeof(KVDB_NODE));
 	scm_set_smob_free(make_node_tag, free_node);
 	scm_set_smob_mark(make_node_tag, mark_node);
+	kvdb_node_tag = scm_make_smob_type("kvdb-node", sizeof(KVDB_NODE));
+	scm_set_smob_free(kvdb_node_tag, free_kvdb);
+	sessions_db = kv_open(scm_from_locale_string("sessions"));
+	scm_c_define("sessions-db", sessions_db);
 	file_sym = scm_from_utf8_symbol("file");
 	data_sym = scm_from_utf8_symbol("data");
 	scm_c_define_gsubr("make-doc", 2, 0, 0, make_doc);
 	scm_c_define_gsubr("touch-doc", 1, 0, 1, touch_node);
 	scm_c_define_gsubr("fetch-doc", 1, 0, 1, fetch_node);
-	scm_c_define_gsubr("kv-open", 1, 0, 0, open_kvdb);
-	scm_c_define_gsubr("cache-set", 2, 0, 0, redis_set);
-	scm_c_define_gsubr("cache-hset", 3, 0, 0, redis_hset);
-	scm_c_define_gsubr("cache-append", 2, 0, 0, redis_append);
-	scm_c_define_gsubr("cache-get", 1, 0, 0, redis_get);
-	scm_c_define_gsubr("cache-hget", 2, 0, 0, redis_hget);
-	scm_c_define_gsubr("cache-get-file", 1, 0, 0, redis_get_file);
-	scm_c_define_gsubr("cache-del", 1, 0, 0, redis_del);
-	scm_c_define_gsubr("cache-ping", 0, 0, 0, redis_ping);
-	scm_c_define_gsubr("cache-exists", 1, 0, 0, redis_exists);
-	scm_c_define_gsubr("watch-edit", 1, 0, 0, watch_edit);
+	scm_c_define_gsubr("kv-open", 1, 0, 0, kv_open);
+	scm_c_define_gsubr("kv-close", 1, 0, 0, kv_close);
+	scm_c_define_gsubr("kv-set", 3, 0, 0, kv_set);
+	scm_c_define_gsubr("kv-get", 2, 0, 0, kv_get);
+	scm_c_define_gsubr("kv-exists", 2, 0, 0, kv_exists);
+	scm_c_define_gsubr("kv-count", 1, 0, 0, kv_count);
+	scm_c_define_gsubr("kv-keys", 1, 0, 0, kv_keys);
+	scm_c_define_gsubr("kv-del", 2, 0, 0, kv_del);
+//	scm_c_define_gsubr("watch-edit", 1, 0, 0, watch_edit);
 	}
