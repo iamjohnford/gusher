@@ -52,6 +52,8 @@
 #define BOOT_FILE "boot.scm"
 #define COOKIE_KEY "GUSHERID"
 #define MAX_THREADS 32
+#define POLL_TIMEOUT 3000
+#define POLICE_INTVL 6
 
 struct handler_entry {
 	char *path;
@@ -660,6 +662,7 @@ static void clear_queues() {
 static void shutdown_env(void) {
 	regfree(&cookie_pat);
 	clear_queues();
+	shutdown_cache();
 	shutdown_inotify();
 	shutdown_http();
 	shutdown_log();
@@ -794,12 +797,18 @@ static int http_socket(int port) {
 	return sock;
 	}
 
+static void police() {
+	police_cache();
+	return;
+	}
+
 int main(int argc, char **argv) {
 	struct pollfd polls[3];
 	int opt, sock;
 	int fdin, nfds;
 	int http_port;
 	int background;
+	time_t mark;
 	http_port = DEFAULT_PORT;
 	threading = 1;
 	background = 0;
@@ -856,8 +865,13 @@ int main(int argc, char **argv) {
 		while (n-- > 0) add_thread();
 		}
 	nfds = (background ? 2 : 3);
+	mark = time(NULL) + POLICE_INTVL;
 	while (running) {  
-		if (poll(polls, nfds, 3000) < 1) continue;
+		if (time(NULL) >= mark) {
+			mark += POLICE_INTVL;
+			police();
+			}
+		if (poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
 		//if (running == 0) break; // why?
 		if (polls[0].revents & POLLIN) process_http(sock);
 		if (polls[1].revents & POLLIN) process_inotify_event();

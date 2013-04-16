@@ -17,5 +17,7 @@
 */
 
 void init_cache(void);
+void shutdown_cache(void);
+void police_cache(void);
 SCM get_session(const char *);
 SCM put_session(const char *, SCM);

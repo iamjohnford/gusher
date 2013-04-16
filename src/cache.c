@@ -51,11 +51,18 @@ typedef struct make_node {
 	int dirty;
 	} MAKE_NODE;
 
+typedef struct file_node {
+	MAKE_NODE *node;
+	time_t mtime;
+	struct file_node *next;
+	} FILE_NODE;
+
 static int redis_sock = -1;
 static int redis_port;
 static SCM file_sym;
 static SCM data_sym;
 static SCM redis_mutex;
+static FILE_NODE *file_nodes = NULL;
 
 static void invalidate(MAKE_NODE *node) {
 	SCM cursor;
@@ -179,12 +186,18 @@ static void add_ascendant(SCM dependent, SCM self) {
 
 static SCM make_doc(SCM ingredients, SCM recipe) {
 	MAKE_NODE *node;
+	FILE_NODE *fnode;
 	SCM smob, cursor;
 	if (scm_is_symbol(ingredients)) {
 		if (ingredients == file_sym) {
 			node = make_node(TYPE_FILE);
 			node->filepath = scm_to_locale_string(recipe);
 			node->dirty = 1;
+			fnode = (FILE_NODE *)malloc(sizeof(FILE_NODE));
+			fnode->node = node;
+			fnode->mtime = 0;
+			fnode->next = file_nodes;
+			file_nodes = fnode;
 			}
 		else {
 			node = make_node(TYPE_DATUM);
@@ -529,6 +542,32 @@ static SCM watch_edit(SCM dir) {
 	if (redis_sock < 0) return SCM_BOOL_F;
 	return add_watch(dir, scm_from_uint32(IN_CLOSE_WRITE),
 		scm_c_make_gsubr("edit_watch_handler", 2, 0, 0, edit_watch_handler));
+	}
+
+void police_cache(void) {
+	FILE_NODE *node;
+	struct stat nstat;
+	for (node = file_nodes; node != NULL; node = node->next) {
+		if (stat(node->node->filepath, &nstat) != 0) continue;
+		if (node->mtime == 0) {
+			node->mtime = nstat.st_mtime;
+			continue;
+			}
+		if (nstat.st_mtime <= node->mtime) continue;
+		node->mtime = nstat.st_mtime;
+		invalidate(node->node);
+		}
+	return;
+	}
+
+void shutdown_cache(void) {
+	FILE_NODE *next;
+	while (file_nodes != NULL) {
+		next = file_nodes->next;
+		free(file_nodes);
+		file_nodes = next;
+		}
+	return;
 	}
 
 void init_cache(void) {
