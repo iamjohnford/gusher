@@ -596,7 +596,7 @@ install-data-local:
 	groupadd -f gusher
 	mkdir -p $(lib1dir)/kc
 	chown -R root:gusher $(lib1dir)
-	chmod -R g+w $(lib1dir)
+	chmod -R g+sw $(lib1dir)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
