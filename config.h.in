@@ -27,6 +27,9 @@
 /* Define to 1 if you have the `jansson' library (-ljansson). */
 #undef HAVE_LIBJANSSON
 
+/* Define to 1 if you have the `kyotocabinet' library (-lkyotocabinet). */
+#undef HAVE_LIBKYOTOCABINET
+
 /* Define to 1 if you have the `m' library (-lm). */
 #undef HAVE_LIBM
 
