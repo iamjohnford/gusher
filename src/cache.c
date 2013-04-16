@@ -38,9 +38,7 @@
 #define TYPE_DATUM 0
 #define TYPE_FILE 1
 #define TYPE_CHAIN 2
-
-static scm_t_bits make_node_tag;
-static const char *sessions_key = "SESSIONS";
+#define KC_ROOT "/var/lib/gusher/kc"
 
 typedef struct make_node {
 	SCM callback;
@@ -51,6 +49,12 @@ typedef struct make_node {
 	int type;
 	int dirty;
 	} MAKE_NODE;
+
+typedef struct kvdb_node {
+	KCDB *db;
+	char *path;
+	struct kvdb_node *next;
+	} KVDB_NODE;
 
 typedef struct file_node {
 	MAKE_NODE *node;
@@ -64,6 +68,10 @@ static SCM file_sym;
 static SCM data_sym;
 static SCM redis_mutex;
 static FILE_NODE *file_nodes = NULL;
+static scm_t_bits make_node_tag;
+static scm_t_bits kvdb_node_tag;
+static SCM sessions_db;
+static KVDB_NODE *kvdbs = NULL;
 
 static void invalidate(MAKE_NODE *node) {
 	SCM cursor;
@@ -422,19 +430,24 @@ static char *redis_hget_c(const char *key, const char *field) {
 
 SCM get_session(const char *sesskey) {
 	char *value;
-	value = redis_hget_c(sessions_key, sesskey);
+	size_t vsiz;
+	SCM session;
+	value = kcdbget(sessions_db, sesskey, strlen(sesskey), &vsiz);
 	if (value == NULL) return SCM_BOOL_F;
-	return json_decode(scm_take_locale_string(value));
+	session = json_decode(scm_from_locale_string(value));
+	kcfree(value);
+	return session;
 	}
 
 SCM put_session(const char *sesskey, SCM table) {
 	int res;
 	char *buf;
 	buf = scm_to_locale_string(json_encode(table));
-	res = redis_hset_c(sessions_key, sesskey, buf);
+	res = kcdbset(sessions_db, sesskey, strlen(sesskey),
+				buf, strlen(buf));
 	free(buf);
 	scm_remember_upto_here_1(table);
-	return (res ? SCM_BOOL_T : SCM_BOOL_F);
+	return (res == 0? SCM_BOOL_F : SCM_BOOL_T);
 	}
 
 static SCM redis_hget(SCM key, SCM field) {
@@ -568,7 +581,37 @@ void shutdown_cache(void) {
 		free(file_nodes);
 		file_nodes = next;
 		}
+	if (sessions_db != NULL) {
+		kcdbclose(sessions_db);
+		kcdbdel(sessions_db);
+		}
 	return;
+	}
+
+static SCM open_kvdb(SCM entry) {
+	static char path[PATH_MAX];
+	char *sentry;
+	KVDB_NODE *node;
+	KCDB *db;
+	sentry = scm_to_locale_string(entry);
+	sprintf(path, "%s/%s", KC_ROOT, sentry);
+	db = kcdbnew();
+	if (!kcdbopen(db, path, KCOWRITER | KCOCREATE)) {
+		log_msg("kv-open '%s': %s\n", sentry,
+					kcecodename(kcdbecode(db)));
+		kcdbdel(db);
+		free(sentry);
+		return SCM_BOOL_F;
+		}
+	free(sentry);
+	node = (KVDB_NODE *)scm_gc_malloc(sizeof(KVDB_NODE), "kvdb-node");
+	node->db = db;
+	node->path = (char *)malloc(strlen(path) + 1);
+	strcpy(node->path, path);
+	node->next = kvdbs;
+	kvdbs = node;
+	chmod(path, 0664);
+	SCM_RETURN_NEWSMOB(kvdb_node_tag, node);
 	}
 
 void init_cache(void) {
@@ -576,7 +619,10 @@ void init_cache(void) {
 	scm_c_define("redis-mutex", redis_mutex);
 	redis_port = DEFAULT_REDIS_PORT;
 	redis_connect();
+	sessions_db = open_kvdb(scm_from_locale_string("sessions.kch"));
+	scm_gc_protect_object(sessions_db);
 	make_node_tag = scm_make_smob_type("make-node", sizeof(MAKE_NODE));
+	kvdb_node_tag = scm_make_smob_type("kvdb-node", sizeof(KVDB_NODE));
 	scm_set_smob_free(make_node_tag, free_node);
 	scm_set_smob_mark(make_node_tag, mark_node);
 	file_sym = scm_from_utf8_symbol("file");
@@ -584,6 +630,7 @@ void init_cache(void) {
 	scm_c_define_gsubr("make-doc", 2, 0, 0, make_doc);
 	scm_c_define_gsubr("touch-doc", 1, 0, 1, touch_node);
 	scm_c_define_gsubr("fetch-doc", 1, 0, 1, fetch_node);
+	scm_c_define_gsubr("kv-open", 1, 0, 0, open_kvdb);
 	scm_c_define_gsubr("cache-set", 2, 0, 0, redis_set);
 	scm_c_define_gsubr("cache-hset", 3, 0, 0, redis_hset);
 	scm_c_define_gsubr("cache-append", 2, 0, 0, redis_append);

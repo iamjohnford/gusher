@@ -626,13 +626,13 @@ static void init_env(void) {
 	scm_handlers = SCM_EOL;
 	sprintf(pats, "%s=([0-9a-f]+)", COOKIE_KEY);
 	regcomp(&cookie_pat, pats, REG_EXTENDED);
+	init_log();
 	init_postgres();
 	init_time();
 	init_cache();
 	init_json();
 	init_template();
 	init_inotify();
-	init_log();
 	init_http();
 	here = getcwd(NULL, 0);
 	if (chdir(gusher_root) == 0) {

@@ -21,6 +21,7 @@ AC_CHECK_LIB([m], [floor])
 AC_CHECK_LIB([curl], [curl_global_init])
 AC_CHECK_LIB([xml2], [xmlReadMemory])
 AC_CHECK_LIB([readline], [readline])
+AC_CHECK_LIB([kyotocabinet], [kcdbopen])
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])

@@ -8,6 +8,6 @@ install-data-local:
 	groupadd -f gusher
 	mkdir -p $(lib1dir)/kc
 	chown -R root:gusher $(lib1dir)
-	chmod -R g+w $(lib1dir)
+	chmod -R g+sw $(lib1dir)
 
 AM_CFLAGS = -Wall -I/usr/local/include/guile/2.0 -I/usr/include/libxml2 -DLOCALLIB=\"$(libdir)\"
