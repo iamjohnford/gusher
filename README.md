@@ -13,7 +13,8 @@ Features include:
 - basic [postgresql](http://www.postgresql.org/) interface for SQL
 database access
 
-- [Redis](http://redis.io/) for persistent key-value storage
+- [KyotoCabinet](http://fallabs.com/kyotocabinet/), embedded
+key-value database
 
 - http client implemented with [libcurl](http://curl.haxx.se/)
 
@@ -21,10 +22,10 @@ database access
 
 - XML parsing with [libxml2](http://xmlsoft.org/)
 
-- "make"-like caching facility, where cache refresh is governed by
-a cached item's dependencies and its build procedure
+- "make"-like content caching facility, where cache is automatically
+refreshed as needed, according to a cached item's dependencies
 
-- simple templating facility, mainly for composing HTML
+- fast, simple templating facility, mainly for composing HTML
 
 - use of Linux kernel's ["inotify"](http://linux.die.net/man/7/inotify)
 subsystem to trigger application
