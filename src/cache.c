@@ -80,6 +80,12 @@ static void invalidate(MAKE_NODE *node) {
 	return;
 	}
 
+static SCM touched_node(SCM doc) {
+	MAKE_NODE *node;
+	node = (MAKE_NODE *)SCM_SMOB_DATA(doc);
+	return (node->dirty ? SCM_BOOL_T : SCM_BOOL_F);
+	}
+
 static SCM touch_node(SCM doc, SCM args) {
 	MAKE_NODE *node;
 	node = (MAKE_NODE *)SCM_SMOB_DATA(doc);
@@ -448,6 +454,7 @@ void init_cache(void) {
 	scm_c_define_gsubr("make-doc", 2, 0, 0, make_doc);
 	scm_c_define_gsubr("touch-doc", 1, 0, 1, touch_node);
 	scm_c_define_gsubr("fetch-doc", 1, 0, 1, fetch_node);
+	scm_c_define_gsubr("touched-doc?", 1, 0, 0, touched_node);
 	scm_c_define_gsubr("kv-open", 1, 0, 0, kv_open);
 	scm_c_define_gsubr("kv-close", 1, 0, 0, kv_close);
 	scm_c_define_gsubr("kv-set", 3, 0, 0, kv_set);
