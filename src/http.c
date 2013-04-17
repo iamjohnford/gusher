@@ -47,7 +47,6 @@ static SCM mutex;
 static HNODE *new_handle() {
 	HNODE *node;
 	node = (HNODE *)malloc(sizeof(HNODE));
-fprintf(stderr, "MAKE %08lx\n", (unsigned long)node);
 	node->handle = curl_easy_init();
 	node->next = NULL;
 	return node;
@@ -62,7 +61,6 @@ static HNODE *get_handle() {
 		return node;
 		}
 	node = hpool;
-fprintf(stderr, "REUSE %08lx\n", (unsigned long)node);
 	hpool = node->next;
 	node->next = NULL;
 	scm_unlock_mutex(mutex);
@@ -71,7 +69,6 @@ fprintf(stderr, "REUSE %08lx\n", (unsigned long)node);
 
 static void release_handle(HNODE *node) {
 	scm_lock_mutex(mutex);
-fprintf(stderr, "RELEASE %08lx\n", (unsigned long)node);
 	node->next = hpool;
 	hpool = node;
 	scm_unlock_mutex(mutex);
@@ -277,15 +274,13 @@ static SCM http_get(SCM url) {
 
 void init_http() {
 	curl_global_init(CURL_GLOBAL_ALL);
-	mutex = scm_make_mutex();
-	scm_c_define("http-mutex", mutex);
+	scm_gc_protect_object(mutex = scm_make_mutex());
 	scm_c_define_gsubr("http-get", 1, 0, 0, http_get);
 	}
 
 void shutdown_http() {
 	HNODE *next;
 	while (hpool != NULL) {
-fprintf(stderr, "FREE %08lx\n", (unsigned long)hpool);
 		next = hpool->next;
 		curl_easy_cleanup(hpool->handle);
 		free(hpool);
