@@ -25,6 +25,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include "log.h"
+
 int inotify_fd = -1;
 extern char gusher_root[];
 static char signals_root[PATH_MAX];
@@ -61,6 +63,18 @@ SCM add_watch(SCM path, SCM mask, SCM handler) {
 	return SCM_BOOL_T;
 	}
 
+static void write_signal(const char *path, const char *msg) {
+	int fd;
+	if ((fd = open(path, O_CREAT | O_WRONLY | O_TRUNC, 0664)) < 0) {
+		log_msg("signals: can't write %s [%s]\n", path, strerror(errno));
+		return;
+		}
+	fchmod(fd, 0664);
+	if (msg != NULL) write(fd, (const void *)msg, strlen(msg));
+	close(fd);
+	return;
+	}
+
 static int assure_sigfile(const char *path) {
 	struct stat bstat;
 	if (stat(path, &bstat) == 0) return 1;
@@ -68,9 +82,7 @@ static int assure_sigfile(const char *path) {
 		perror("assure_sigfile");
 		return 0;
 		}
-	int fd = open(path, O_CREAT | O_WRONLY, 0664);
-	fchmod(fd, 0664);
-	close(fd);
+	write_signal(path, NULL);
 	return 1;
 	}
 
@@ -97,18 +109,15 @@ SCM signal_subscribe(SCM signal, SCM handler) {
 	}
 
 SCM signal_touch(SCM signal, SCM rest) {
-	char *sname;
+	char *sname, *msg;
 	char sigpath[PATH_MAX];
 	sname = scm_to_locale_string(scm_symbol_to_string(signal));
 	sprintf(sigpath, "%s/%s", signals_root, sname);
 	assure_sigfile(sigpath);
-	int fd = open(sigpath, O_CREAT | O_WRONLY | O_TRUNC, 0664);
-	if (rest != SCM_EOL) {
-		char *msg = scm_to_locale_string(SCM_CAR(rest));
-		write(fd, (const void *)msg, strlen(msg));
-		free(msg);
-		}
-	close(fd);
+	if (rest != SCM_EOL) msg = scm_to_locale_string(SCM_CAR(rest));
+	else msg = NULL;
+	write_signal(sigpath, msg);
+	free(msg);
 	free(sname);
 	return SCM_BOOL_T;
 	}
@@ -162,29 +171,47 @@ static struct inotify_event *read_event(int fd) {
 	return (struct inotify_event *)buf;
 	}
 
+#define SIGBUFSIZE 1024
+
+static SCM get_signal_msg(const char *path) {
+	int fd, n;
+	SCM list, msg;
+	char *buf;
+	if ((fd = open(path, O_RDONLY)) < 0) {
+		buf = (char *)malloc(SIGBUFSIZE);
+		sprintf(buf, "unable to read %s", path);
+		return scm_take_locale_string(buf);
+		}
+	list = scm_cons(scm_from_locale_string(""), SCM_EOL);
+	buf = (char *)malloc(SIGBUFSIZE);
+	while ((n = read(fd, (void *)buf, SIGBUFSIZE)) > 0) {
+		list = scm_cons(scm_take_locale_stringn(buf, n), list);
+		buf = (char *)malloc(SIGBUFSIZE);
+		}
+	free(buf);
+	close(fd);
+	msg = scm_string_concatenate(scm_reverse(list));
+	scm_remember_upto_here_2(list, msg);
+	return msg;
+	}
+
 void process_inotify_event() {
 	struct inotify_event *event;
 	SCM node, tuple, msg;
 	int wd;
 	char *sigfile;
-	char msgbuf[1024];
 	event = read_event(inotify_fd);
 	wd = event->wd;
 	free(event);
 	sigfile = NULL;
-	msgbuf[0] = '\0';
-	msg = scm_from_locale_string(msgbuf);
+	msg = scm_from_locale_string("");
 	node = watch_nodes;
 	while (node != SCM_EOL) {
 		tuple = SCM_CAR(node);
 		if (wd == scm_to_int(SCM_CAR(tuple))) {
 			if (sigfile == NULL) {
 				sigfile = scm_to_locale_string(SCM_CADDR(tuple));
-				int fd = open(sigfile, O_RDONLY);
-				int n = read(fd, (void *)msgbuf, sizeof(msgbuf) - 1);
-				msgbuf[n] = '\0';
-				msg = scm_from_locale_string(msgbuf);
-				close(fd);
+				msg = get_signal_msg(sigfile);
 				}
 			scm_call_1(SCM_CADR(tuple), msg);
 			}
