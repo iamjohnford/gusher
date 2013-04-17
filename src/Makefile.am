@@ -7,6 +7,7 @@ lib1_SCRIPTS = boot.scm
 install-data-local:
 	groupadd -f gusher
 	mkdir -p $(lib1dir)/kc
+	mkdir -p $(lib1dir)/signals
 	chown -R root:gusher $(lib1dir)
 	chmod -R g+sw $(lib1dir)
 

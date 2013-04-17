@@ -73,7 +73,7 @@ typedef struct rframe {
 static int running;
 static const char *prompt = "gusher> ";
 static struct handler_entry *handlers = NULL;
-static char gusher_root[1024];
+char gusher_root[PATH_MAX];
 static regex_t cookie_pat;
 static const char *hex = "0123456789abcdef";
 static SCM threads;
