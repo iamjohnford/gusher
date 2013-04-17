@@ -69,6 +69,7 @@ static int assure_sigfile(const char *path) {
 		return 0;
 		}
 	int fd = open(path, O_CREAT | O_WRONLY, 0664);
+	fchmod(fd, 0664);
 	close(fd);
 	return 1;
 	}
