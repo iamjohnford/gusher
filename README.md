@@ -27,8 +27,7 @@ refreshed as needed, according to a cached item's dependencies
 
 - fast, simple templating facility, mainly for composing HTML
 
-- use of Linux kernel's ["inotify"](http://linux.die.net/man/7/inotify)
-subsystem to trigger application
-events asynchronously in response to file system activity
+- low-level, asynchronous intra- and inter-process signaling, for
+event-driven operation
 
 - interactive command line editing and history (libreadline)
