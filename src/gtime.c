@@ -18,15 +18,17 @@
 
 #include <libguile.h>
 #include <time.h>
+#include <math.h>
 
 struct g_time {
 	struct tm time;
+	int msec;
 	};
 
 scm_t_bits time_tag;
 
 SCM local_time_intern(int year, int month, int day,
-			int hour, int minute, int second) {
+			int hour, int minute, int second, int msec) {
 	SCM smob;
 	struct g_time *time;
 	time = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
@@ -39,28 +41,33 @@ SCM local_time_intern(int year, int month, int day,
 	time->time.tm_sec = second;
 	time->time.tm_isdst = -1;
 	mktime(&(time->time));
+	time->msec = msec;
 	SCM_NEWSMOB(smob, time_tag, time);
 	return smob;
 	}
 
 static SCM local_time(SCM year, SCM month, SCM day,
-			SCM hour, SCM minute, SCM second) {
+			SCM hour, SCM minute, SCM second, SCM msec) {
 	return local_time_intern(scm_to_int(year),
 				scm_to_int(month),
 				scm_to_int(day),
 				scm_to_int(hour),
 				scm_to_int(minute),
-				scm_to_int(second));
+				scm_to_int(second),
+				scm_to_int(msec));
 	}
 
 static SCM now_time(void) {
 	struct tm *ltime;
 	time_t utime;
 	struct g_time *gtime;
+	struct timeval tp;
 	SCM smob;
 	gtime = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
 					"timestamp");
-	utime = time(NULL);
+	gettimeofday(&tp, NULL);
+	utime = tp.tv_sec;
+	//utime = time(NULL);
 	ltime = localtime(&utime);
 	gtime->time.tm_year = ltime->tm_year;
 	gtime->time.tm_mon = ltime->tm_mon;
@@ -72,6 +79,7 @@ static SCM now_time(void) {
 	gtime->time.tm_yday = ltime->tm_yday;
 	gtime->time.tm_isdst = ltime->tm_isdst;
 	gtime->time.tm_gmtoff = ltime->tm_gmtoff;
+	gtime->msec = (tp.tv_usec + 500) / 1000;
 	SCM_NEWSMOB(smob, time_tag, gtime);
 	return smob;
 	}
@@ -169,7 +177,7 @@ static SCM time_sec(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
-	return scm_from_signed_integer(gtime->time.tm_sec);
+	return scm_from_double(gtime->time.tm_sec + gtime->msec / 1000.0);
 	}
 
 static SCM time_offset(SCM time) {
@@ -177,6 +185,15 @@ static SCM time_offset(SCM time) {
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	return scm_from_signed_integer(gtime->time.tm_gmtoff);
+	}
+
+static SCM snooze(SCM sec) {
+	double naptime, dsec;
+	struct timespec ts;
+	naptime = scm_to_double(sec);
+	ts.tv_sec = (time_t)(dsec = floor(naptime));
+	ts.tv_nsec = (naptime - dsec) * 1000000000;
+	return (nanosleep(&ts, NULL) == 0 ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
 void init_time(void) {
@@ -193,4 +210,5 @@ void init_time(void) {
 	scm_c_define_gsubr("time-min", 1, 0, 0, time_min);
 	scm_c_define_gsubr("time-sec", 1, 0, 0, time_sec);
 	scm_c_define_gsubr("time-gmtoffset", 1, 0, 0, time_offset);
+	scm_c_define_gsubr("snooze", 1, 0, 0, snooze);
 	} 
