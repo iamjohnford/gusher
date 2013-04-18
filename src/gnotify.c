@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -71,8 +72,10 @@ static void write_signal(const char *path, const char *msg) {
 		log_msg("signals: can't write %s [%s]\n", path, strerror(errno));
 		return;
 		}
+	flock(fd, LOCK_EX);
 	fchmod(fd, 0664);
 	if (msg != NULL) write(fd, (const void *)msg, strlen(msg));
+	flock(fd, LOCK_UN);
 	close(fd);
 	return;
 	}
@@ -182,6 +185,7 @@ static SCM get_signal_msg(const char *path) {
 		sprintf(buf, "unable to read %s", path);
 		return scm_take_locale_string(buf);
 		}
+	flock(fd, LOCK_SH);
 	list = scm_cons(scm_from_locale_string(""), SCM_EOL);
 	buf = (char *)malloc(SIGBUFSIZE);
 	while ((n = read(fd, (void *)buf, SIGBUFSIZE)) > 0) {
@@ -189,6 +193,7 @@ static SCM get_signal_msg(const char *path) {
 		buf = (char *)malloc(SIGBUFSIZE);
 		}
 	free(buf);
+	flock(fd, LOCK_UN);
 	close(fd);
 	msg = scm_string_concatenate(scm_reverse(list));
 	scm_remember_upto_here_2(list, msg);
