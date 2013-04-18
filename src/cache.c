@@ -67,6 +67,8 @@ static FILE_NODE *file_nodes = NULL;
 static scm_t_bits make_node_tag;
 static scm_t_bits kvdb_node_tag;
 static SCM sessions_db;
+static SCM kv_reader;
+static SCM kv_writer;
 
 static void invalidate(MAKE_NODE *node) {
 	SCM cursor;
@@ -266,11 +268,6 @@ static SCM kv_set(SCM db, SCM key, SCM value) {
 	return (res == 0 ? SCM_BOOL_F : SCM_BOOL_T);
 	}
 
-SCM put_session(const char *sesskey, SCM table) {
-	return kv_set(sessions_db, scm_from_locale_string(sesskey),
-						json_encode(table));
-	}
-
 static SCM kv_get(SCM db, SCM key) {
 	size_t vsiz;
 	char *skey, *value;
@@ -341,14 +338,6 @@ static SCM kv_del(SCM db, SCM key) {
 	return (res ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
-SCM get_session(const char *sesskey) {
-	SCM val;
-	val = kv_get(sessions_db, scm_from_locale_string(sesskey));
-	if (val == SCM_BOOL_F) return SCM_BOOL_F;
-	scm_remember_upto_here_1(val);
-	return json_decode(val);
-	}
-
 /*
 static SCM edit_watch_handler(SCM path, SCM mask) {
 	char *spath;
@@ -386,7 +375,7 @@ void police_cache(void) {
 	return;
 	}
 
-static SCM kv_open(SCM entry) {
+static SCM kv_open(SCM entry, SCM mode) {
 	static char path[PATH_MAX];
 	char *sentry;
 	KVDB_NODE *node;
@@ -394,7 +383,7 @@ static SCM kv_open(SCM entry) {
 	sentry = scm_to_locale_string(entry);
 	sprintf(path, "%s/%s.kch", KC_ROOT, sentry);
 	db = kcdbnew();
-	if (!kcdbopen(db, path, KCOWRITER | KCOCREATE)) {
+	if (!kcdbopen(db, path, scm_to_int(mode))) {
 		log_msg("kv-open '%s': %s\n", sentry,
 					kcecodename(kcdbecode(db)));
 		kcdbdel(db);
@@ -430,6 +419,24 @@ static size_t free_kvdb(SCM smob) {
 	return 0;
 	}
 
+SCM get_session(const char *sesskey) {
+	SCM val;
+	SCM db = kv_open(sessions_db, kv_reader);
+	val = kv_get(db, scm_from_locale_string(sesskey));
+	kv_close(db);
+	if (val == SCM_BOOL_F) return SCM_BOOL_F;
+	scm_remember_upto_here_2(val, db);
+	return json_decode(val);
+	}
+
+SCM put_session(const char *sesskey, SCM table) {
+	SCM db = kv_open(sessions_db, kv_writer);
+	SCM res = kv_set(db, scm_from_locale_string(sesskey),
+						json_encode(table));
+	kv_close(db);
+	return res;
+	}
+
 void shutdown_cache(void) {
 	FILE_NODE *next;
 	while (file_nodes != NULL) {
@@ -437,7 +444,6 @@ void shutdown_cache(void) {
 		free(file_nodes);
 		file_nodes = next;
 		}
-	kv_close(sessions_db);
 	return;
 	}
 
@@ -447,15 +453,18 @@ void init_cache(void) {
 	scm_set_smob_mark(make_node_tag, mark_node);
 	kvdb_node_tag = scm_make_smob_type("kvdb-node", sizeof(KVDB_NODE));
 	scm_set_smob_free(kvdb_node_tag, free_kvdb);
-	sessions_db = kv_open(scm_from_locale_string("sessions"));
-	scm_c_define("sessions-db", sessions_db);
+	sessions_db = scm_from_locale_string("sessions");
+	scm_gc_protect_object(sessions_db);
 	file_sym = scm_from_utf8_symbol("file");
 	data_sym = scm_from_utf8_symbol("data");
 	scm_c_define_gsubr("make-doc", 2, 0, 0, make_doc);
 	scm_c_define_gsubr("touch-doc", 1, 0, 1, touch_node);
 	scm_c_define_gsubr("fetch-doc", 1, 0, 1, fetch_node);
 	scm_c_define_gsubr("touched-doc?", 1, 0, 0, touched_node);
-	scm_c_define_gsubr("kv-open", 1, 0, 0, kv_open);
+	scm_c_define_gsubr("kv-open", 2, 0, 0, kv_open);
+	scm_c_define("kv-reader", kv_reader = scm_from_int(KCOREADER));
+	scm_c_define("kv-writer",
+					kv_writer = scm_from_int(KCOWRITER | KCOCREATE));
 	scm_c_define_gsubr("kv-close", 1, 0, 0, kv_close);
 	scm_c_define_gsubr("kv-set", 3, 0, 0, kv_set);
 	scm_c_define_gsubr("kv-get", 2, 0, 0, kv_get);
