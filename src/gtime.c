@@ -67,6 +67,11 @@ static SCM now_time(void) {
 					"timestamp");
 	gettimeofday(&tp, NULL);
 	utime = tp.tv_sec;
+	gtime->msec = (tp.tv_usec + 500) / 1000;
+	if (gtime->msec >= 1000) {
+		utime += 1;
+		gtime->msec -= 1000;
+		}
 	//utime = time(NULL);
 	ltime = localtime(&utime);
 	gtime->time.tm_year = ltime->tm_year;
@@ -79,7 +84,6 @@ static SCM now_time(void) {
 	gtime->time.tm_yday = ltime->tm_yday;
 	gtime->time.tm_isdst = ltime->tm_isdst;
 	gtime->time.tm_gmtoff = ltime->tm_gmtoff;
-	gtime->msec = (tp.tv_usec + 500) / 1000;
 	SCM_NEWSMOB(smob, time_tag, gtime);
 	return smob;
 	}
