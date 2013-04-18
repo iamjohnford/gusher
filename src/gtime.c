@@ -163,6 +163,13 @@ static SCM time_mday(SCM time) {
 	return scm_from_signed_integer(gtime->time.tm_mday);
 	}
 
+static SCM time_wday(SCM time) {
+	struct g_time *gtime;
+	scm_assert_smob_type(time_tag, time);
+	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	return scm_from_signed_integer(gtime->time.tm_wday);
+	}
+
 static SCM time_hour(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
@@ -210,6 +217,7 @@ void init_time(void) {
 	scm_c_define_gsubr("time-year", 1, 0, 0, time_year);
 	scm_c_define_gsubr("time-month", 1, 0, 0, time_month);
 	scm_c_define_gsubr("time-mday", 1, 0, 0, time_mday);
+	scm_c_define_gsubr("time-wday", 1, 0, 0, time_wday);
 	scm_c_define_gsubr("time-hour", 1, 0, 0, time_hour);
 	scm_c_define_gsubr("time-min", 1, 0, 0, time_min);
 	scm_c_define_gsubr("time-sec", 1, 0, 0, time_sec);
