@@ -27,6 +27,8 @@
 
 #include "log.h"
 
+#define SIGBUFSIZE 1024
+
 int inotify_fd = -1;
 extern char gusher_root[];
 static char signals_root[PATH_MAX];
@@ -170,8 +172,6 @@ static struct inotify_event *read_event(int fd) {
 		}
 	return (struct inotify_event *)buf;
 	}
-
-#define SIGBUFSIZE 1024
 
 static SCM get_signal_msg(const char *path) {
 	int fd, n;
