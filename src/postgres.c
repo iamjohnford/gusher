@@ -214,6 +214,13 @@ static SCM pg_map_rows(SCM res, SCM rest) {
 	return bag;
 	}
 
+static SCM pg_done(SCM res) {
+	struct pg_res *pgr;
+	scm_assert_smob_type(pg_res_tag, res);
+	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
+	return (pgr->res == NULL ? SCM_BOOL_T : SCM_BOOL_F);
+	}
+
 static SCM pg_next_row(SCM res) {
 	struct pg_res *pgr;
 	SCM row;
@@ -332,6 +339,7 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-each-row", 2, 0, 0, pg_each_row);
 	scm_c_define_gsubr("pg-next-row", 1, 0, 0, pg_next_row);
 	scm_c_define_gsubr("pg-map-rows", 1, 0, 1, pg_map_rows);
+	scm_c_define_gsubr("pg-end-stream?", 1, 0, 0, pg_done);
 	scm_c_define_gsubr("pg-format", 2, 0, 0, pg_format_sql);
 	}
 	
