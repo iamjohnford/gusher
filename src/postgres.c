@@ -267,7 +267,6 @@ static size_t free_pg_conn(SCM smob) {
 	struct pg_conn *pgc;
 	pgc = (struct pg_conn *)SCM_SMOB_DATA(smob);
 	if (pgc->conn != NULL) PQfinish(pgc->conn);
-	scm_gc_free(pgc, sizeof(struct pg_conn), "pg_conn");
 	return 0;
 	}
 
@@ -275,7 +274,6 @@ static size_t free_pg_res(SCM smob) {
 	struct pg_res *pgr;
 	pgr = (struct pg_res *)SCM_SMOB_DATA(smob);
 	if (pgr->res != NULL) PQclear(pgr->res);
-	scm_gc_free(pgr, sizeof(struct pg_res), "pg_res");
 	return 0;
 	}
 
@@ -325,8 +323,8 @@ static SCM pg_format_sql(SCM conn, SCM obj) {
 
 void init_postgres(void) {
 	pg_conn_tag = scm_make_smob_type("pg_conn", sizeof(struct pg_conn));
-	pg_res_tag = scm_make_smob_type("pg_res", sizeof(struct pg_res));
 	scm_set_smob_free(pg_conn_tag, free_pg_conn);
+	pg_res_tag = scm_make_smob_type("pg_res", sizeof(struct pg_res));
 	scm_set_smob_free(pg_res_tag, free_pg_res);
 	scm_set_smob_mark(pg_res_tag, mark_pg_res);
 	scm_c_define_gsubr("pg-open", 1, 0, 0, pg_open);
