@@ -90,7 +90,7 @@ static SCM pg_exec(SCM conn, SCM query) {
 	pgr->nfields = PQnfields(pgr->res);
 	pgr->tuples = PQntuples(pgr->res);
 	for (i = pgr->nfields - 1; i >= 0; i--) {
-		pgr->fields = scm_cons(scm_from_locale_string(
+		pgr->fields = scm_cons(scm_from_utf8_string(
 			PQfname(pgr->res, i)), pgr->fields);
 		pgr->types = scm_cons(scm_from_unsigned_integer(PQftype(pgr->res, i)),
 				pgr->types);
@@ -142,7 +142,7 @@ static SCM pg_decode(char *string, int dtype) {
 		case 1082:
 			return decode_timestamp(string);
 		}
-	return scm_from_locale_string(string);
+	return scm_from_utf8_string(string);
 	}
 
 static SCM build_row(struct pg_res *pgr) {
@@ -202,7 +202,7 @@ static SCM pg_map_rows(SCM res, SCM rest) {
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
 	while (pgr->cursor < pgr->tuples) {
 		row = build_row(pgr);
-		if (scm_is_null(rest))
+		if (!scm_is_null(rest))
 			bag = scm_cons(scm_call_1(SCM_CAR(rest), row), bag);
 		else bag = scm_cons(row, bag);
 		pgr->cursor++;
