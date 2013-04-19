@@ -209,7 +209,7 @@ static SCM snooze(SCM sec) {
 
 void init_time(void) {
 	time_tag = scm_make_smob_type("timestamp", sizeof(struct g_time));
-	scm_c_define_gsubr("time-local", 6, 0, 0, local_time);
+	scm_c_define_gsubr("time-local", 7, 0, 0, local_time);
 	scm_c_define_gsubr("time-format", 2, 0, 0, format_time);
 	scm_c_define_gsubr("time-now", 0, 0, 0, now_time);
 	scm_c_define_gsubr("time-diff", 2, 0, 0, time_diff);
