@@ -19,6 +19,7 @@
 #include <libguile.h>
 #include <libpq-fe.h>
 #include <string.h>
+#include <math.h>
 
 #include "gtime.h"
 #include "log.h"
@@ -100,23 +101,30 @@ static SCM pg_exec(SCM conn, SCM query) {
 
 static SCM decode_timestamp(const char *string) {
 	const char *here;
-	int year, month, day, hour, min, sec;
+	int year, month, day, hour, min, sec, msec;
+	double fsec;
 	here = string;
 	year = atoi(here);
 	here = index(here, '-') + 1;
 	month = atoi(here);
 	here = index(here, '-') + 1;
 	day = atoi(here);
-	if (index(here, ':') == NULL) hour = min = sec = 0;
+	if (index(here, ':') == NULL) hour = min = sec = msec = 0;
 	else {
 		here = index(here, ' ') + 1;
 		hour = atoi(here);
 		here = index(here, ':') + 1;
 		min = atoi(here);
 		here = index(here, ':') + 1;
-		sec = (int)(atof(here) + 0.5);
+		fsec = atof(here);
+		sec = (int)fsec;
+		msec = (int)((fsec - sec) * 1000 + 0.5);
+		if (msec >= 1000) {
+			sec += 1;
+			msec -= 1000;
+			}
 		}
-	return local_time_intern(year, month, day, hour, min, sec);
+	return local_time_intern(year, month, day, hour, min, sec, msec);
 	}
 
 static SCM pg_decode(char *string, int dtype) {
@@ -173,7 +181,7 @@ static SCM pg_get_row(SCM res) {
 	return row;
 	}
 
-static SCM pg_do_rows(SCM res, SCM func) {
+static SCM pg_each_row(SCM res, SCM func) {
 	struct pg_res *pgr;
 	scm_assert_smob_type(pg_res_tag, res);
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
@@ -183,8 +191,43 @@ static SCM pg_do_rows(SCM res, SCM func) {
 		}
 	PQclear(pgr->res);
 	pgr->res = NULL;
-	scm_remember_upto_here_1(res);
 	return SCM_UNSPECIFIED;
+	}
+
+static SCM pg_map_rows(SCM res, SCM rest) {
+	struct pg_res *pgr;
+	SCM bag, row;
+	scm_assert_smob_type(pg_res_tag, res);
+	bag = row = SCM_EOL;
+	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
+	while (pgr->cursor < pgr->tuples) {
+		row = build_row(pgr);
+		if (scm_is_null(rest))
+			bag = scm_cons(scm_call_1(SCM_CAR(rest), row), bag);
+		else bag = scm_cons(row, bag);
+		pgr->cursor++;
+		}
+	PQclear(pgr->res);
+	pgr->res = NULL;
+	bag = scm_reverse(bag);
+	scm_remember_upto_here_2(bag, row);
+	return bag;
+	}
+
+static SCM pg_next_row(SCM res) {
+	struct pg_res *pgr;
+	SCM row;
+	scm_assert_smob_type(pg_res_tag, res);
+	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
+	if (pgr->cursor >= pgr->tuples) {
+		PQclear(pgr->res);
+		pgr->res = NULL;
+		return SCM_BOOL_F;
+		}
+	row = build_row(pgr);
+	pgr->cursor++;
+	scm_remember_upto_here_1(row);
+	return row;
 	}
 
 static SCM pg_clear(SCM res) {
@@ -286,7 +329,9 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-tuples", 1, 0, 0, pg_tuples);
 	scm_c_define_gsubr("pg-fields", 1, 0, 0, pg_fields);
 	scm_c_define_gsubr("pg-get-row", 1, 0, 0, pg_get_row);
-	scm_c_define_gsubr("pg-do-rows", 2, 0, 0, pg_do_rows);
+	scm_c_define_gsubr("pg-each-row", 2, 0, 0, pg_each_row);
+	scm_c_define_gsubr("pg-next-row", 1, 0, 0, pg_next_row);
+	scm_c_define_gsubr("pg-map-rows", 1, 0, 1, pg_map_rows);
 	scm_c_define_gsubr("pg-format", 2, 0, 0, pg_format_sql);
 	}
 	
