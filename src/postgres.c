@@ -135,6 +135,9 @@ static SCM pg_decode(char *string, int dtype) {
 		case 1184:
 		case 1082:
 			return decode_timestamp(string);
+		case 16:
+		case 1000:
+			return (string[0] == 't' ? SCM_BOOL_T : SCM_BOOL_F);
 		}
 	return scm_from_utf8_string(string);
 	}
