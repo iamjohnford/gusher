@@ -332,6 +332,10 @@ static SCM pg_format_sql(SCM conn, SCM obj) {
 	return out;
 	}
 
+static SCM pg_cell(SCM row, SCM col_key) {
+	return scm_assq_ref(row, col_key);
+	}
+
 void init_postgres(void) {
 	pg_conn_tag = scm_make_smob_type("pg_conn", sizeof(struct pg_conn));
 	scm_set_smob_free(pg_conn_tag, free_pg_conn);
@@ -351,5 +355,6 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-map-rows", 1, 0, 1, pg_map_rows);
 	scm_c_define_gsubr("pg-end-stream?", 1, 0, 0, pg_done);
 	scm_c_define_gsubr("pg-format", 2, 0, 0, pg_format_sql);
+	scm_c_define_gsubr("pg-cell", 2, 0, 0, pg_cell);
 	}
 	
