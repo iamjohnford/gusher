@@ -22,6 +22,7 @@
 #include <stdio.h>
 
 #include "log.h"
+#include "gtime.h"
 
 static char *make_key(SCM obj) {
 	SCM string;
@@ -72,6 +73,12 @@ static json_t *json_build(SCM obj) {
 		for (node = obj; node != SCM_EOL; node = SCM_CDR(node))
 			json_array_append_new(jobj,
 					json_build(SCM_CAR(node)));
+		}
+	else if (SCM_SMOB_PREDICATE(time_tag, obj)) {
+		buf = scm_to_locale_string(format_time(obj,
+			scm_from_locale_string("%Y-%m-%d %H:%M:%S")));
+		jobj = json_string(buf);
+		free(buf);
 		}
 	else jobj = json_null();
 	scm_remember_upto_here_2(obj, node);
