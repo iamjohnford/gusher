@@ -101,30 +101,24 @@ static SCM pg_exec(SCM conn, SCM query) {
 
 static SCM decode_timestamp(const char *string) {
 	const char *here;
-	int year, month, day, hour, min, sec, msec;
-	double fsec;
+	int year, month, day, hour, min;
+	double sec;
 	here = string;
 	year = atoi(here);
 	here = index(here, '-') + 1;
 	month = atoi(here);
 	here = index(here, '-') + 1;
 	day = atoi(here);
-	if (index(here, ':') == NULL) hour = min = sec = msec = 0;
+	if (index(here, ':') == NULL) hour = min = sec = 0;
 	else {
 		here = index(here, ' ') + 1;
 		hour = atoi(here);
 		here = index(here, ':') + 1;
 		min = atoi(here);
 		here = index(here, ':') + 1;
-		fsec = atof(here);
-		sec = (int)fsec;
-		msec = (int)((fsec - sec) * 1000 + 0.5);
-		if (msec >= 1000) {
-			sec += 1;
-			msec -= 1000;
-			}
+		sec = atof(here);
 		}
-	return local_time_intern(year, month, day, hour, min, sec, msec);
+	return local_time_intern(year, month, day, hour, min, sec);
 	}
 
 static SCM pg_decode(char *string, int dtype) {

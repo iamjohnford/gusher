@@ -28,7 +28,7 @@ struct g_time {
 scm_t_bits time_tag;
 
 SCM local_time_intern(int year, int month, int day,
-			int hour, int minute, int second, int msec) {
+			int hour, int minute, double second) {
 	SCM smob;
 	struct g_time *time;
 	time = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
@@ -38,23 +38,26 @@ SCM local_time_intern(int year, int month, int day,
 	time->time.tm_mday = day;
 	time->time.tm_hour = hour;
 	time->time.tm_min = minute;
-	time->time.tm_sec = second;
+	time->time.tm_sec = (int)second;
 	time->time.tm_isdst = -1;
+	time->msec = (int)((second - time->time.tm_sec) * 1000 + 0.5);
+	if (time->msec >= 1000) {
+		time->time.tm_sec += 1;
+		time->msec -= 1000;
+		}
 	mktime(&(time->time));
-	time->msec = msec;
 	SCM_NEWSMOB(smob, time_tag, time);
 	return smob;
 	}
 
 static SCM local_time(SCM year, SCM month, SCM day,
-			SCM hour, SCM minute, SCM second, SCM msec) {
+			SCM hour, SCM minute, SCM second) {
 	return local_time_intern(scm_to_int(year),
 				scm_to_int(month),
 				scm_to_int(day),
 				scm_to_int(hour),
 				scm_to_int(minute),
-				scm_to_int(second),
-				scm_to_int(msec));
+				scm_to_double(second));
 	}
 
 static SCM now_time(void) {
@@ -209,7 +212,7 @@ static SCM snooze(SCM sec) {
 
 void init_time(void) {
 	time_tag = scm_make_smob_type("timestamp", sizeof(struct g_time));
-	scm_c_define_gsubr("time-local", 7, 0, 0, local_time);
+	scm_c_define_gsubr("time-local", 6, 0, 0, local_time);
 	scm_c_define_gsubr("time-format", 2, 0, 0, format_time);
 	scm_c_define_gsubr("time-now", 0, 0, 0, now_time);
 	scm_c_define_gsubr("time-diff", 2, 0, 0, time_diff);
