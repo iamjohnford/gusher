@@ -91,13 +91,19 @@ static int assure_sigfile(const char *path) {
 	return 1;
 	}
 
-SCM signal_subscribe(SCM signal, SCM handler) {
+static char *get_sigpath(SCM signal, char *buf) {
 	char *sname;
+	sname = scm_to_locale_string(scm_symbol_to_string(signal));
+	sprintf(buf, "%s/%s", signals_root, sname);
+	free(sname);
+	return buf;
+	}
+
+SCM signal_subscribe(SCM signal, SCM handler) {
 	char sigpath[PATH_MAX];
 	SCM tuple, newlist;
 	int wd;
-	sname = scm_to_locale_string(scm_symbol_to_string(signal));
-	sprintf(sigpath, "%s/%s", signals_root, sname);
+	get_sigpath(signal, sigpath);
 	assure_sigfile(sigpath);
 	wd = inotify_add_watch(inotify_fd, sigpath, IN_ATTRIB | IN_CLOSE_WRITE);
 	tuple = SCM_EOL;
@@ -108,22 +114,19 @@ SCM signal_subscribe(SCM signal, SCM handler) {
 	scm_gc_protect_object(newlist);
 	if (watch_nodes != SCM_EOL) scm_gc_unprotect_object(watch_nodes);
 	watch_nodes = newlist;
-	free(sname);
 	scm_remember_upto_here_2(tuple, newlist);
 	return SCM_BOOL_T;
 	}
 
 SCM signal_touch(SCM signal, SCM rest) {
-	char *sname, *msg;
+	char *msg;
 	char sigpath[PATH_MAX];
-	sname = scm_to_locale_string(scm_symbol_to_string(signal));
-	sprintf(sigpath, "%s/%s", signals_root, sname);
+	get_sigpath(signal, sigpath);
 	assure_sigfile(sigpath);
 	if (rest != SCM_EOL) msg = scm_to_locale_string(SCM_CAR(rest));
 	else msg = NULL;
 	write_signal(sigpath, msg);
 	free(msg);
-	free(sname);
 	return SCM_BOOL_T;
 	}
 
@@ -176,7 +179,7 @@ static struct inotify_event *read_event(int fd) {
 	return (struct inotify_event *)buf;
 	}
 
-static SCM get_signal_msg(const char *path) {
+static SCM get_signal_msg_intern(const char *path) {
 	int fd, n;
 	SCM list, msg;
 	char *buf;
@@ -200,6 +203,12 @@ static SCM get_signal_msg(const char *path) {
 	return msg;
 	}
 
+static SCM get_signal_msg(SCM signal) {
+	char path[PATH_MAX];
+	get_sigpath(signal, path);
+	return get_signal_msg_intern(path);
+	}
+
 void process_inotify_event() {
 	struct inotify_event *event;
 	SCM node, tuple, msg;
@@ -216,7 +225,7 @@ void process_inotify_event() {
 		if (wd == scm_to_int(SCM_CAR(tuple))) {
 			if (sigfile == NULL) {
 				sigfile = scm_to_locale_string(SCM_CADDR(tuple));
-				msg = get_signal_msg(sigfile);
+				msg = get_signal_msg_intern(sigfile);
 				}
 			scm_call_1(SCM_CADR(tuple), msg);
 			}
@@ -246,6 +255,7 @@ void init_inotify() {
 	scm_c_define_gsubr("inotify-rm-watch", 1, 0, 0, rm_watch);
 	scm_c_define_gsubr("signal-subscribe", 2, 0, 0, signal_subscribe);
 	scm_c_define_gsubr("signal-touch", 1, 0, 1, signal_touch);
+	scm_c_define_gsubr("signal-msg", 1, 0, 0, get_signal_msg);
 	}
 
 void shutdown_inotify() {
