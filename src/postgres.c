@@ -90,7 +90,7 @@ static SCM pg_exec(SCM conn, SCM query) {
 	pgr->nfields = PQnfields(pgr->res);
 	pgr->tuples = PQntuples(pgr->res);
 	for (i = pgr->nfields - 1; i >= 0; i--) {
-		pgr->fields = scm_cons(scm_from_utf8_string(
+		pgr->fields = scm_cons(scm_from_utf8_symbol(
 			PQfname(pgr->res, i)), pgr->fields);
 		pgr->types = scm_cons(scm_from_unsigned_integer(PQftype(pgr->res, i)),
 				pgr->types);
