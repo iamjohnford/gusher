@@ -208,6 +208,20 @@ static SCM pg_map_rows(SCM res, SCM rest) {
 	return bag;
 	}
 
+static SCM pg_one_row(SCM conn, SCM query) {
+	struct pg_res *pgr;
+	SCM res, row;
+	scm_assert_smob_type(pg_conn_tag, conn);
+	res = pg_exec(conn, query);
+	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
+	if (pgr->cursor < pgr->tuples) row = build_row(pgr);
+	else row = SCM_BOOL_F;
+	PQclear(pgr->res);
+	pgr->res = NULL;
+	scm_remember_upto_here_2(res, row);
+	return row;
+	}
+
 static SCM pg_done(SCM res) {
 	struct pg_res *pgr;
 	scm_assert_smob_type(pg_res_tag, res);
@@ -330,6 +344,7 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-get-row", 1, 0, 0, pg_get_row);
 	scm_c_define_gsubr("pg-each-row", 2, 0, 0, pg_each_row);
 	scm_c_define_gsubr("pg-next-row", 1, 0, 0, pg_next_row);
+	scm_c_define_gsubr("pg-one-row", 2, 0, 0, pg_one_row);
 	scm_c_define_gsubr("pg-map-rows", 1, 0, 1, pg_map_rows);
 	scm_c_define_gsubr("pg-end-stream?", 1, 0, 0, pg_done);
 	scm_c_define_gsubr("pg-format", 2, 0, 0, pg_format_sql);
