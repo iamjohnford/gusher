@@ -201,19 +201,24 @@ static SCM default_not_found(SCM request) {
 
 static SCM find_handler(SCM request) {
 	char *spath;
-	SCM path;
+	int n;
+	SCM path, pair;
 	struct handler_entry *pt;
 	path = scm_assq_ref(request, makesym("url-path"));
 	if (path == SCM_BOOL_F) return SCM_BOOL_F;
 	spath = scm_to_locale_string(path);
 	scm_remember_upto_here_1(path);
+	pair = SCM_EOL;
 	for (pt = handlers; pt != NULL; pt = pt->link) {
-		if (strncmp(pt->path, spath, strlen(pt->path)) == 0) {
+		n = strlen(pt->path);
+		if (strncmp(pt->path, spath, n) == 0) {
+			pair = scm_cons(pt->handler, scm_from_locale_string(&spath[n]));
 			free(spath);
-			return pt->handler;
+			return pair;
 			}
 		}
 	free(spath);
+	scm_remember_upto_here_1(pair);
 	return SCM_BOOL_F;
 	}
 
@@ -483,14 +488,17 @@ static SCM run_responder(SCM request) {
 			}
 		request = scm_acons(makesym("session"),
 						scm_take_locale_string(cookie), request);
+		request = scm_acons(makesym("path-info"),
+						SCM_CDR(handler), request);
 		}
 	SCM reply;
 	//if (handler == SCM_BOOL_F) reply = dump_request(request);
 	if (handler == SCM_BOOL_F) reply = default_not_found(request);
-	else reply = scm_call_1(handler, request);
+	else reply = scm_call_1(SCM_CAR(handler), request);
 	reply = scm_cons(cookie_header, reply);
 	scm_remember_upto_here_1(cookie_header);
 	scm_remember_upto_here_1(reply);
+	scm_remember_upto_here_1(handler);
 	return reply;
 	}
 
