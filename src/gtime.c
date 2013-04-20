@@ -90,7 +90,7 @@ static SCM local_time(SCM year, SCM month, SCM day,
 	}
 
 static SCM now_time(void) {
-	struct tm *ltime;
+	struct tm ltime;
 	time_t utime;
 	struct g_time *gtime;
 	struct timeval tp;
@@ -105,18 +105,9 @@ static SCM now_time(void) {
 		gtime->msec -= 1000;
 		}
 	//utime = time(NULL);
-	ltime = localtime(&utime);
+	localtime_r(&utime, &ltime);
 	gtime->epoch = utime;
-	gtime->time.tm_year = ltime->tm_year;
-	gtime->time.tm_mon = ltime->tm_mon;
-	gtime->time.tm_mday = ltime->tm_mday;
-	gtime->time.tm_hour = ltime->tm_hour;
-	gtime->time.tm_min = ltime->tm_min;
-	gtime->time.tm_sec = ltime->tm_sec;
-	gtime->time.tm_wday = ltime->tm_wday;
-	gtime->time.tm_yday = ltime->tm_yday;
-	gtime->time.tm_isdst = ltime->tm_isdst;
-	gtime->time.tm_gmtoff = ltime->tm_gmtoff;
+	memcpy(&(gtime->time), &ltime, sizeof(struct tm));
 	SCM_NEWSMOB(smob, time_tag, gtime);
 	return smob;
 	}
