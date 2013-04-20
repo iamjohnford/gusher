@@ -106,6 +106,7 @@ static SCM now_time(void) {
 		}
 	//utime = time(NULL);
 	ltime = localtime(&utime);
+	gtime->epoch = utime;
 	gtime->time.tm_year = ltime->tm_year;
 	gtime->time.tm_mon = ltime->tm_mon;
 	gtime->time.tm_mday = ltime->tm_mday;
