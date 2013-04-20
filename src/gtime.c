@@ -30,22 +30,26 @@ scm_t_bits time_tag;
 SCM local_time_intern(int year, int month, int day,
 			int hour, int minute, double second) {
 	SCM smob;
+	struct tm pad;
+	int msec;
 	struct g_time *time;
+	pad.tm_year = year - 1900;
+	pad.tm_mon = month - 1;
+	pad.tm_mday = day;
+	pad.tm_hour = hour;
+	pad.tm_min = minute;
+	pad.tm_sec = (int)second;
+	pad.tm_isdst = -1;
+	msec = (int)((second - pad.tm_sec) * 1000 + 0.5);
+	if (msec >= 1000) {
+		pad.tm_sec += 1;
+		msec -= 1000;
+		}
+	if (mktime(&pad) < 0) return SCM_BOOL_F;
 	time = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
 					"timestamp");
-	time->time.tm_year = year - 1900;
-	time->time.tm_mon = month - 1;
-	time->time.tm_mday = day;
-	time->time.tm_hour = hour;
-	time->time.tm_min = minute;
-	time->time.tm_sec = (int)second;
-	time->time.tm_isdst = -1;
-	time->msec = (int)((second - time->time.tm_sec) * 1000 + 0.5);
-	if (time->msec >= 1000) {
-		time->time.tm_sec += 1;
-		time->msec -= 1000;
-		}
-	mktime(&(time->time));
+	memcpy(&(time->time), &pad, sizeof(struct tm));
+	time->msec = msec;
 	SCM_NEWSMOB(smob, time_tag, time);
 	return smob;
 	}
