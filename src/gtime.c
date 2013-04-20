@@ -149,29 +149,33 @@ static SCM time_diff(SCM time1, SCM time2) {
 	return scm_from_signed_integer(diff);
 	}
 
+inline double epoch_sec(struct g_time *time) {
+	return (time->epoch + time->msec / 1000.0);
+	}
+
 static SCM time_add(SCM time, SCM sec) {
 	struct g_time *gtime;
 	SCM smob;
 	time_t ntime;
-	struct tm *ltime;
+	struct tm ltime;
+	double dtime;
+	int msec;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
-	ntime = mktime(&(gtime->time)) + scm_to_int(sec);
-	ltime = localtime(&ntime);
+	dtime = epoch_sec(gtime) + scm_to_double(sec);
+	ntime = (time_t)floor(dtime);
+	msec = (int)((dtime - ntime) * 1000 + 0.5);
+	if (msec >= 1000) {
+		ntime += 1;
+		msec -= 1000;
+		}
+	localtime_r(&ntime, &ltime);
 	gtime = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
 					"timestamp");
-	gtime->time.tm_year = ltime->tm_year;
-	gtime->time.tm_mon = ltime->tm_mon;
-	gtime->time.tm_mday = ltime->tm_mday;
-	gtime->time.tm_hour = ltime->tm_hour;
-	gtime->time.tm_min = ltime->tm_min;
-	gtime->time.tm_sec = ltime->tm_sec;
-	gtime->time.tm_wday = ltime->tm_wday;
-	gtime->time.tm_yday = ltime->tm_yday;
-	gtime->time.tm_isdst = ltime->tm_isdst;
-	gtime->time.tm_gmtoff = ltime->tm_gmtoff;
+	memcpy(&(gtime->time), &ltime, sizeof(struct tm));
+	gtime->msec = msec;
+	gtime->epoch = ntime;
 	SCM_NEWSMOB(smob, time_tag, gtime);
-	scm_remember_upto_here_1(time);
 	return smob;
 	}
 
