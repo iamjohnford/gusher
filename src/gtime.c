@@ -128,20 +128,17 @@ SCM format_time(SCM time, SCM format) {
 	return ftime;
 	}
 
+inline double epoch_sec(struct g_time *time) {
+	return (time->epoch + time->msec / 1000.0);
+	}
+
 static SCM time_diff(SCM time1, SCM time2) {
 	struct g_time *gtime1, *gtime2;
-	int diff;
 	scm_assert_smob_type(time_tag, time1);
 	gtime1 = (struct g_time *)SCM_SMOB_DATA(time1);
 	scm_assert_smob_type(time_tag, time2);
 	gtime2 = (struct g_time *)SCM_SMOB_DATA(time2);
-	diff = mktime(&(gtime1->time)) - mktime(&(gtime2->time));
-	scm_remember_upto_here_2(time1, time2);
-	return scm_from_signed_integer(diff);
-	}
-
-inline double epoch_sec(struct g_time *time) {
-	return (time->epoch + time->msec / 1000.0);
+	return scm_from_double(epoch_sec(gtime1) - epoch_sec(gtime2));
 	}
 
 static SCM time_add(SCM time, SCM sec) {
