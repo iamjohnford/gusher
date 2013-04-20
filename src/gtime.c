@@ -57,6 +57,28 @@ SCM local_time_intern(int year, int month, int day,
 	return smob;
 	}
 
+SCM time_at(SCM epoch) {
+	SCM smob;
+	int msec;
+	time_t ep;
+	double dep;
+	struct g_time *time;
+	dep = scm_to_double(epoch);
+	ep = (int)floor(dep);
+	msec = (int)((dep - ep) * 1000 + 0.5);
+	if (msec >= 1000) {
+		ep += 1;
+		msec -= 1000;
+		}
+	time = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
+					"timestamp");
+	localtime_r(&ep, &(time->time));
+	time->epoch = ep;
+	time->msec = msec;
+	SCM_NEWSMOB(smob, time_tag, time);
+	return smob;
+	}
+
 static SCM local_time(SCM year, SCM month, SCM day,
 			SCM hour, SCM minute, SCM second) {
 	return local_time_intern(scm_to_int(year),
@@ -228,6 +250,7 @@ void init_time(void) {
 	time_tag = scm_make_smob_type("timestamp", sizeof(struct g_time));
 	scm_c_define_gsubr("time-local", 6, 0, 0, local_time);
 	scm_c_define_gsubr("time-now", 0, 0, 0, now_time);
+	scm_c_define_gsubr("time-at", 1, 0, 0, time_at);
 	scm_c_define_gsubr("time-format", 2, 0, 0, format_time);
 	scm_c_define_gsubr("time-diff", 2, 0, 0, time_diff);
 	scm_c_define_gsubr("time-add", 2, 0, 0, time_add);
