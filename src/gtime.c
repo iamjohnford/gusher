@@ -190,9 +190,11 @@ static SCM time_mday(SCM time) {
 
 static SCM time_wday(SCM time) {
 	struct g_time *gtime;
+	int wday;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
-	return scm_from_signed_integer(gtime->time.tm_wday);
+	if ((wday = gtime->time.tm_wday) == 0) wday = 7;
+	return scm_from_signed_integer(wday);
 	}
 
 static SCM time_hour(SCM time) {
