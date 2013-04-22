@@ -57,7 +57,7 @@ SCM local_time_intern(int year, int month, int day,
 	return smob;
 	}
 
-SCM time_at(SCM epoch) {
+static SCM time_at(SCM epoch) {
 	SCM smob;
 	int usec;
 	time_t ep;
