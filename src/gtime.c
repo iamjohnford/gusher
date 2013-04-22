@@ -22,7 +22,7 @@
 
 struct g_time {
 	struct tm time;
-	int msec;
+	int usec;
 	time_t epoch;
 	};
 
@@ -32,7 +32,7 @@ SCM local_time_intern(int year, int month, int day,
 			int hour, int minute, double second) {
 	SCM smob;
 	struct tm pad;
-	int msec;
+	int usec;
 	time_t epoch;
 	struct g_time *time;
 	pad.tm_year = year - 1900;
@@ -42,39 +42,39 @@ SCM local_time_intern(int year, int month, int day,
 	pad.tm_min = minute;
 	pad.tm_sec = (int)second;
 	pad.tm_isdst = -1;
-	msec = (int)((second - pad.tm_sec) * 1000 + 0.5);
-	if (msec >= 1000) {
+	usec = (int)((second - pad.tm_sec) * 1000000 + 0.5);
+	if (usec >= 1000000) {
 		pad.tm_sec += 1;
-		msec -= 1000;
+		usec -= 1000000;
 		}
 	if ((epoch = mktime(&pad)) < 0) return SCM_BOOL_F;
 	time = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
 					"timestamp");
 	memcpy(&(time->time), &pad, sizeof(struct tm));
 	time->epoch = epoch;
-	time->msec = msec;
+	time->usec = usec;
 	SCM_NEWSMOB(smob, time_tag, time);
 	return smob;
 	}
 
 SCM time_at(SCM epoch) {
 	SCM smob;
-	int msec;
+	int usec;
 	time_t ep;
 	double dep;
 	struct g_time *time;
 	dep = scm_to_double(epoch);
 	ep = (int)floor(dep);
-	msec = (int)((dep - ep) * 1000 + 0.5);
-	if (msec >= 1000) {
+	usec = (int)((dep - ep) * 1000000 + 0.5);
+	if (usec >= 1000000) {
 		ep += 1;
-		msec -= 1000;
+		usec -= 1000000;
 		}
 	time = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
 					"timestamp");
 	localtime_r(&ep, &(time->time));
 	time->epoch = ep;
-	time->msec = msec;
+	time->usec = usec;
 	SCM_NEWSMOB(smob, time_tag, time);
 	return smob;
 	}
@@ -99,11 +99,7 @@ static SCM now_time(void) {
 					"timestamp");
 	gettimeofday(&tp, NULL);
 	utime = tp.tv_sec;
-	gtime->msec = (tp.tv_usec + 500) / 1000;
-	if (gtime->msec >= 1000) {
-		utime += 1;
-		gtime->msec -= 1000;
-		}
+	gtime->usec = tp.tv_usec;
 	//utime = time(NULL);
 	localtime_r(&utime, &ltime);
 	gtime->epoch = utime;
@@ -129,7 +125,7 @@ SCM format_time(SCM time, SCM format) {
 	}
 
 inline double epoch_sec(struct g_time *time) {
-	return (time->epoch + time->msec / 1000.0);
+	return (time->epoch + time->usec / 1000000.0);
 	}
 
 static SCM time_diff(SCM time1, SCM time2) {
@@ -147,21 +143,21 @@ static SCM time_add(SCM time, SCM sec) {
 	time_t ntime;
 	struct tm ltime;
 	double dtime;
-	int msec;
+	int usec;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	dtime = epoch_sec(gtime) + scm_to_double(sec);
 	ntime = (time_t)floor(dtime);
-	msec = (int)((dtime - ntime) * 1000 + 0.5);
-	if (msec >= 1000) {
+	usec = (int)((dtime - ntime) * 1000000 + 0.5);
+	if (usec >= 1000000) {
 		ntime += 1;
-		msec -= 1000;
+		usec -= 1000000;
 		}
 	localtime_r(&ntime, &ltime);
 	gtime = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
 					"timestamp");
 	memcpy(&(gtime->time), &ltime, sizeof(struct tm));
-	gtime->msec = msec;
+	gtime->usec = usec;
 	gtime->epoch = ntime;
 	SCM_NEWSMOB(smob, time_tag, gtime);
 	return smob;
@@ -213,7 +209,8 @@ static SCM time_sec(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
-	return scm_from_double(gtime->time.tm_sec + gtime->msec / 1000.0);
+	return scm_from_double(gtime->time.tm_sec
+			+ gtime->usec / 1000000.0);
 	}
 
 static SCM time_epoch(SCM time) {
