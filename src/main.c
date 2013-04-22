@@ -81,6 +81,7 @@ static SCM qmutex;
 static SCM pmutex;
 static SCM qcondvars;
 static SCM scm_handlers;
+static SCM query_sym;
 static int nthreads = 0;
 static int busy_threads = 0;
 static int threading;
@@ -389,7 +390,7 @@ static SCM start_request(char *line) {
 							request);
 //printf("URL: %s\n", mark);
 	request = scm_acons(makesym("query-string"), qstring, request);
-	request = scm_acons(makesym("query"), query, request);
+	request = scm_acons(query_sym, query, request);
 	scm_remember_upto_here_2(query, qstring);
 	scm_remember_upto_here_1(request);
 	return request;
@@ -608,6 +609,27 @@ printf("start thread %08lx\n", id);
 	return SCM_BOOL_T;
 	}
 
+static SCM query_value(SCM request, SCM key) {
+	SCM query, value;
+	if ((query = scm_assq_ref(request, query_sym)) == SCM_BOOL_F)
+		return SCM_BOOL_F;
+	value = scm_assq_ref(query, key);
+	scm_remember_upto_here_2(query, value);
+	return value;
+	}
+
+static SCM query_value_number(SCM request, SCM key) {
+	SCM string;
+	int n;
+	char *buf;
+	if ((string = query_value(request, key)) == SCM_BOOL_F) n = 0;
+	else {
+		n = atoi(buf = scm_to_locale_string(string));
+		free(buf);
+		}
+	return scm_from_signed_integer(n);
+	}
+
 static void add_thread() {
 	SCM thread;
 	if (nthreads >= MAX_THREADS) return;
@@ -629,6 +651,10 @@ static void init_env(void) {
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
 	scm_c_define_gsubr("simple-response", 2, 0, 0, simple_http_response);
 	scm_c_define_gsubr("json-response", 1, 0, 0, json_http_response);
+	scm_c_define_gsubr("query-value", 2, 0, 0, query_value);
+	scm_c_define_gsubr("query-value-number", 2, 0, 0, query_value_number);
+	query_sym = makesym("query");
+	scm_gc_protect_object(query_sym);
 	threads = SCM_EOL;
 	scm_permanent_object(qmutex = scm_make_mutex());
 	scm_permanent_object(pmutex = scm_make_mutex());
