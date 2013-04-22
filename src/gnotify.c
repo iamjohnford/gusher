@@ -91,10 +91,11 @@ static int assure_sigfile(const char *path) {
 	return 1;
 	}
 
-static char *get_sigpath(SCM signal, char *buf) {
+static char *get_sigpath(SCM signal, char *buf, int len) {
 	char *sname;
 	sname = scm_to_locale_string(scm_symbol_to_string(signal));
-	sprintf(buf, "%s/%s", signals_root, sname);
+	snprintf(buf, len - 1, "%s/%s", signals_root, sname);
+	buf[len - 1] = '\0';
 	free(sname);
 	return buf;
 	}
@@ -103,7 +104,7 @@ SCM signal_subscribe(SCM signal, SCM handler) {
 	char sigpath[PATH_MAX];
 	SCM tuple, newlist;
 	int wd;
-	get_sigpath(signal, sigpath);
+	get_sigpath(signal, sigpath, sizeof(sigpath));
 	assure_sigfile(sigpath);
 	wd = inotify_add_watch(inotify_fd, sigpath, IN_ATTRIB | IN_CLOSE_WRITE);
 	tuple = SCM_EOL;
@@ -121,7 +122,7 @@ SCM signal_subscribe(SCM signal, SCM handler) {
 SCM signal_touch(SCM signal, SCM rest) {
 	char *msg;
 	char sigpath[PATH_MAX];
-	get_sigpath(signal, sigpath);
+	get_sigpath(signal, sigpath, sizeof(sigpath));
 	assure_sigfile(sigpath);
 	if (rest != SCM_EOL) msg = scm_to_locale_string(SCM_CAR(rest));
 	else msg = NULL;
@@ -185,7 +186,8 @@ static SCM get_signal_msg_intern(const char *path) {
 	char *buf;
 	if ((fd = open(path, O_RDONLY)) < 0) {
 		buf = (char *)malloc(SIGBUFSIZE);
-		sprintf(buf, "unable to read %s", path);
+		snprintf(buf, SIGBUFSIZE - 1, "unable to read %s", path);
+		buf[SIGBUFSIZE - 1] = '\0';
 		return scm_take_locale_string(buf);
 		}
 	flock(fd, LOCK_SH);
@@ -205,7 +207,7 @@ static SCM get_signal_msg_intern(const char *path) {
 
 static SCM get_signal_msg(SCM signal) {
 	char path[PATH_MAX];
-	get_sigpath(signal, path);
+	get_sigpath(signal, path, sizeof(path));
 	return get_signal_msg_intern(path);
 	}
 

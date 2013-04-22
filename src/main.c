@@ -475,7 +475,9 @@ static SCM run_responder(SCM request) {
 			char buf[128];
 			cookie = (char *)malloc(33);
 			put_uuid(cookie);
-			sprintf(buf, "%s=%s; Path=/", COOKIE_KEY, cookie);
+			snprintf(buf, sizeof(buf) - 1, "%s=%s; Path=/",
+							COOKIE_KEY, cookie);
+			buf[sizeof(buf) - 1] = '\0';
 			cookie_header = scm_cons(scm_from_locale_string("set-cookie"),
 				scm_from_locale_string(buf));
 			}
@@ -632,7 +634,8 @@ static void init_env(void) {
 	scm_permanent_object(pmutex = scm_make_mutex());
 	qcondvars = SCM_EOL;
 	scm_handlers = SCM_EOL;
-	sprintf(pats, "%s=([0-9a-f]+)", COOKIE_KEY);
+	snprintf(pats, sizeof(pats) - 1, "%s=([0-9a-f]+)", COOKIE_KEY);
+	pats[sizeof(pats) - 1] = '\0';
 	regcomp(&cookie_pat, pats, REG_EXTENDED);
 	init_log();
 	init_postgres();
@@ -847,7 +850,6 @@ int main(int argc, char **argv) {
 	signal(SIGABRT, signal_handler);
 	if (strlen(gusher_root) == 0) {
 		strcpy(gusher_root, DEFAULT_GUSHER_ROOT);
-		//sprintf(gusher_root, "%s/gusher", LOCALLIB);
 		}
 	sock = http_socket(http_port);
 	if (sock < 0) exit(1);
