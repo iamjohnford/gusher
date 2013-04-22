@@ -381,7 +381,8 @@ static SCM kv_open(SCM entry, SCM mode) {
 	KVDB_NODE *node;
 	KCDB *db;
 	sentry = scm_to_locale_string(entry);
-	sprintf(path, "%s/%s.kch", KC_ROOT, sentry);
+	snprintf(path, sizeof(path) - 1, "%s/%s.kch", KC_ROOT, sentry);
+	path[sizeof(path) - 1] = '\0';
 	db = kcdbnew();
 	if (!kcdbopen(db, path, scm_to_int(mode))) {
 		log_msg("kv-open '%s': %s\n", sentry,
