@@ -222,7 +222,8 @@ static SCM process_body(SCM headers, SCM body) {
 			match(stype, "application/javascript"))
 		body = json_decode(body);
 	else if (matchn(stype, "application/xml") ||
-			match(stype, "text/xml"))
+			matchn(stype, "application/atom+xml") ||
+			matchn(stype, "text/xml"))
 		body = parse_xml(body);
 	free(stype);
 	scm_remember_upto_here_2(body, headers);
