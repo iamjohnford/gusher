@@ -141,7 +141,7 @@ static SCM fetch_node(SCM smob, SCM args) {
 		scm_unlock_mutex(node->mutex);
 		return payload;
 		}
-	log_msg("REGENERATE %08x\n", (unsigned long)smob);
+	//log_msg("REGENERATE %08x\n", (unsigned long)smob);
 	node->dirty = 0;
 	switch (node->type) {
 	case TYPE_DATUM: break;
