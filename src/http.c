@@ -153,6 +153,7 @@ static SCM walk_tree(xmlNode *node, int level) {
 	snode = SCM_EOL;
 	text = SCM_EOL;
 	attribs = SCM_EOL;
+	kids = SCM_EOL;
 	if (node->name != NULL) name = (const char *)node->name;
 	else name = "no-name";
 	snode = scm_acons(symbol("name"),
@@ -161,32 +162,33 @@ static SCM walk_tree(xmlNode *node, int level) {
 	if (node->properties != NULL) {
 		for (attr = node->properties; attr; attr = attr->next) {
 			attribs = scm_acons(symbol((const char *)attr->name),
-					scm_from_locale_string((const char *)attr->children->content),
+					scm_from_locale_string((const char *)
+										attr->children->content),
 					attribs);
 			}
-		snode = scm_acons(symbol("attrs"), attribs, snode);
 		}
+	snode = scm_acons(symbol("attrs"), attribs, snode);
 	if (node->children != NULL) {
-		kids = SCM_EOL;
 		for (knode = node->children; knode; knode = knode->next) {
 			if (knode->type == XML_ELEMENT_NODE)
 				kids = scm_cons(walk_tree(knode, level + 1), kids);
 			else if ((knode->type == XML_TEXT_NODE) ||
 						(knode->type == XML_CDATA_SECTION_NODE))
-				text = scm_cons(scm_from_locale_string((const char *)knode->content), text);
+				text = scm_cons(scm_from_locale_string((const char *)
+										knode->content), text);
 			else
 				fprintf(stderr, "NODE TYPE %d\n", knode->type);
 			}
-		if (!scm_is_null(kids)) {
-			snode = scm_acons(symbol("kids"),
-					scm_reverse(kids), snode);
-			}
 		}
+	snode = scm_acons(symbol("items"), kids, snode);
 	if (!scm_is_null(text)) {
 		joined = join_strings(scm_reverse(text), 1);
 		if (scm_c_string_length(joined) > 0)
 			snode = scm_acons(symbol("content"), joined, snode);
+		scm_remember_upto_here_1(joined);
 		}
+	scm_remember_upto_here_2(snode, kids);
+	scm_remember_upto_here_2(text, attribs);
 	return snode;
 	}
 
@@ -202,7 +204,7 @@ static SCM parse_xml(SCM doc) {
 	xmlFreeDoc(xmldoc);
 	xmlCleanupParser();
 	free(buf);
-	scm_remember_upto_here_1(doc);
+	scm_remember_upto_here_1(tree);
 	return tree;
 	}
 
