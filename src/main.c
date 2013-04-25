@@ -671,6 +671,7 @@ static void init_env(void) {
 	init_template();
 	init_inotify();
 	init_http();
+	init_butter();
 	here = getcwd(NULL, 0);
 	if (chdir(gusher_root) == 0) {
 		if (stat(BOOT_FILE, &bstat) == 0) {

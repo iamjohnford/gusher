@@ -1,5 +1,5 @@
 bin_PROGRAMS = gusher
-gusher_SOURCES = main.c postgres.c gtime.c cache.c json.c template.c gnotify.c log.c http.c
+gusher_SOURCES = main.c postgres.c gtime.c cache.c json.c template.c gnotify.c log.c http.c butter.c
 
 lib1dir = /var/lib/gusher
 lib1_SCRIPTS = boot.scm

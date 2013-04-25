@@ -65,7 +65,8 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(lib1dir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_gusher_OBJECTS = main.$(OBJEXT) postgres.$(OBJEXT) gtime.$(OBJEXT) \
 	cache.$(OBJEXT) json.$(OBJEXT) template.$(OBJEXT) \
-	gnotify.$(OBJEXT) log.$(OBJEXT) http.$(OBJEXT)
+	gnotify.$(OBJEXT) log.$(OBJEXT) http.$(OBJEXT) \
+	butter.$(OBJEXT)
 gusher_OBJECTS = $(am_gusher_OBJECTS)
 gusher_LDADD = $(LDADD)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
@@ -238,7 +239,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-gusher_SOURCES = main.c postgres.c gtime.c cache.c json.c template.c gnotify.c log.c http.c
+gusher_SOURCES = main.c postgres.c gtime.c cache.c json.c template.c gnotify.c log.c http.c butter.c
 lib1dir = /var/lib/gusher
 lib1_SCRIPTS = boot.scm
 AM_CFLAGS = -Wall -I/usr/local/include/guile/2.0 -I/usr/include/libxml2 -DLOCALLIB=\"$(libdir)\"
@@ -363,6 +364,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/butter.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gnotify.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gtime.Po@am__quote@
