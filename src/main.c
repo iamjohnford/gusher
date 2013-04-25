@@ -45,6 +45,7 @@
 #include "gnotify.h"
 #include "log.h"
 #include "http.h"
+#include "butter.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
 #define addlist(list,item) (list=scm_cons((item),(list)))
