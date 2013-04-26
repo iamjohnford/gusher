@@ -27,7 +27,7 @@
 #include "log.h"
 
 #define match(a,b) (strcmp(a,b) == 0)
-#define symbol(s) (scm_from_locale_symbol(s))
+#define symbol(s) (scm_from_utf8_symbol(s))
 
 typedef struct hnode {
 	CURL *handle;
@@ -43,6 +43,7 @@ typedef struct cnode {
 
 static HNODE *hpool = NULL;
 static SCM mutex;
+static SCM infix;
 
 static HNODE *new_handle() {
 	HNODE *node;
@@ -95,6 +96,10 @@ static char *downcase(char *buf) {
 	return buf;
 	}
 
+inline SCM scm_from_string(const char *str) {
+	return scm_from_utf8_string(str);
+	}
+
 static size_t header_handler(void *data, size_t size, size_t n,
 									void *userp) {
 	char *buf, *pt, *value;
@@ -114,7 +119,7 @@ static size_t header_handler(void *data, size_t size, size_t n,
 		if (pt == value) break;
 		pt--;
 		}
-	val = scm_from_locale_string(value);
+	val = scm_from_string(value);
 	*((SCM *)userp) = scm_acons(sym, val, *((SCM *)userp));
 	scm_remember_upto_here_2(sym, val);
 	return rsize;
@@ -124,23 +129,18 @@ static SCM join_strings(SCM list, int trim) {
 	SCM joined;
 	char *buf, *pt;
 	int trimmed;
-	joined = scm_string_join(list,
-				scm_from_locale_string(""),
-				symbol("infix"));
+	joined = scm_string_join(list, scm_from_string(""), infix);
 	if (!trim) return joined;
 	trimmed = 0;
-	buf = scm_to_locale_string(joined);
+	buf = scm_to_utf8_string(joined);
 	pt = buf + strlen(buf) - 1;
 	while (isspace(*pt)) {
 		*pt-- = '\0';
 		trimmed = 1;
 		}
 	for (pt = buf; *pt && isspace(*pt); pt++) trimmed = 1;
-	if (trimmed) {
-		joined = scm_from_locale_string(pt);
-		free(buf);
-		}
-	else joined = scm_take_locale_string(buf);
+	joined = scm_from_string(trimmed ? pt : buf);
+	free(buf);
 	scm_remember_upto_here_1(joined);
 	return joined;
 	}
@@ -157,12 +157,12 @@ static SCM walk_tree(xmlNode *node, int level) {
 	if (node->name != NULL) name = (const char *)node->name;
 	else name = "no-name";
 	snode = scm_acons(symbol("name"),
-			scm_from_locale_string(name),
+			scm_from_string(name),
 			snode);
 	if (node->properties != NULL) {
 		for (attr = node->properties; attr; attr = attr->next) {
 			attribs = scm_acons(symbol((const char *)attr->name),
-					scm_from_locale_string((const char *)
+					scm_from_string((const char *)
 										attr->children->content),
 					attribs);
 			}
@@ -174,7 +174,7 @@ static SCM walk_tree(xmlNode *node, int level) {
 				kids = scm_cons(walk_tree(knode, level + 1), kids);
 			else if ((knode->type == XML_TEXT_NODE) ||
 						(knode->type == XML_CDATA_SECTION_NODE))
-				text = scm_cons(scm_from_locale_string((const char *)
+				text = scm_cons(scm_from_string((const char *)
 										knode->content), text);
 			else
 				fprintf(stderr, "NODE TYPE %d\n", knode->type);
@@ -197,7 +197,7 @@ static SCM parse_xml(SCM doc) {
 	SCM tree;
 	xmlDoc *xmldoc;
 	xmlNode *root;
-	buf = scm_to_locale_string(doc);
+	buf = scm_to_utf8_string(doc);
 	xmldoc = xmlReadMemory(buf, strlen(buf), NULL, NULL, 0);
 	root = xmlDocGetRootElement(xmldoc);
 	tree = walk_tree(root, 0);
@@ -217,7 +217,7 @@ static SCM process_body(SCM headers, SCM body) {
 	SCM ctype;
 	ctype = scm_assq_ref(headers, symbol("content-type"));
 	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
-	stype = scm_to_locale_string(ctype);
+	stype = scm_to_utf8_string(ctype);
 	scm_remember_upto_here_1(ctype);
 	if (match(stype, "text/json") ||
 			match(stype, "application/json") ||
@@ -243,7 +243,7 @@ static SCM http_get(SCM url) {
 	handle = hnode->handle;
 	chunks = NULL;
 	headers = SCM_EOL;
-	surl = scm_to_locale_string(url);
+	surl = scm_to_utf8_string(url);
 	curl_easy_setopt(handle, CURLOPT_URL, surl);
 	/*curl_easy_setopt(handle, CURLOPT_HEADER, 1);
 	curl_easy_setopt(handle, CURLOPT_VERBOSE, 1);*/
@@ -263,7 +263,8 @@ static SCM http_get(SCM url) {
 	body = SCM_EOL;
 	while (chunks != NULL) {
 		next = chunks->next;
-		chunk = scm_take_locale_stringn(chunks->content, chunks->size);
+		chunk = scm_from_utf8_stringn(chunks->content, chunks->size);
+		free(chunks->content);
 		body = scm_cons(chunk, body);
 		free(chunks);
 		chunks = next;
@@ -277,6 +278,8 @@ static SCM http_get(SCM url) {
 
 void init_http() {
 	curl_global_init(CURL_GLOBAL_ALL);
+	infix = symbol("infix");
+	scm_gc_protect_object(infix);
 	scm_gc_protect_object(mutex = scm_make_mutex());
 	scm_c_define_gsubr("http-get", 1, 0, 0, http_get);
 	}
