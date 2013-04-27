@@ -40,8 +40,8 @@ static SCM to_i(SCM obj) {
 		i = atoi(buf);
 		free(buf);
 		}
-	else if (scm_is_integer(obj)) return obj;
 	else if (scm_is_real(obj)) i = (int)scm_to_double(obj);
+	else if (scm_is_integer(obj)) return obj;
 	else if (obj == SCM_BOOL_T) i = 1;
 	return scm_from_int(i);
 	}
