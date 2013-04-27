@@ -227,6 +227,13 @@ static SCM time_offset(SCM time) {
 	return scm_from_signed_integer(gtime->time.tm_gmtoff);
 	}
 
+static SCM time_zone(SCM time) {
+	struct g_time *gtime;
+	scm_assert_smob_type(time_tag, time);
+	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	return scm_from_locale_string(gtime->time.tm_zone);
+	}
+
 static SCM snooze(SCM sec) {
 	double naptime, dsec;
 	struct timespec ts;
@@ -253,5 +260,6 @@ void init_time(void) {
 	scm_c_define_gsubr("time-sec", 1, 0, 0, time_sec);
 	scm_c_define_gsubr("time-epoch", 1, 0, 0, time_epoch);
 	scm_c_define_gsubr("time-gmtoffset", 1, 0, 0, time_offset);
+	scm_c_define_gsubr("time-zone", 1, 0, 0, time_zone);
 	scm_c_define_gsubr("snooze", 1, 0, 0, snooze);
 	} 
