@@ -20,6 +20,7 @@
 #include <time.h>
 #include <math.h>
 #include <curl/curl.h>
+#include <regex.h>
 
 struct g_time {
 	struct tm time;
@@ -28,6 +29,7 @@ struct g_time {
 	};
 
 scm_t_bits time_tag;
+static regex_t time_pat1;
 
 SCM local_time_intern(int year, int month, int day,
 			int hour, int minute, double second) {
@@ -247,10 +249,38 @@ static SCM snooze(SCM sec) {
 static SCM time_decode(SCM stamp) {
 	time_t epoch;
 	char *str;
+	regmatch_t match[10];
 	struct g_time *time;
 	SCM smob;
 	str = scm_to_locale_string(stamp);
-	epoch = curl_getdate(str, NULL);
+	if (regexec(&time_pat1, str, 8, match, 0) == 0) {
+		char *pt, *next;
+		struct tm time;
+		int zone;
+		pt = str;
+		*(next = &str[match[1].rm_eo]) = '\0';
+		time.tm_year = atoi(pt) - 1900;
+		pt = next + 1;
+		*(next = &str[match[2].rm_eo]) = '\0';
+		time.tm_mon = atoi(pt) - 1;
+		pt = next + 1;
+		*(next = &str[match[3].rm_eo]) = '\0';
+		time.tm_mday = atoi(pt);
+		pt = next + 1;
+		*(next = &str[match[4].rm_eo]) = '\0';
+		time.tm_hour = atoi(pt);
+		pt = next + 1;
+		*(next = &str[match[5].rm_eo]) = '\0';
+		time.tm_min = atoi(pt);
+		pt = next + 1;
+		*(next = &str[match[6].rm_eo]) = '\0';
+		time.tm_sec = atoi(pt);
+		zone = atoi(&str[match[7].rm_so]);
+		time.tm_isdst = -1;
+		epoch = mktime(&time);
+		epoch += time.tm_gmtoff - zone * 3600;
+		}
+	else epoch = curl_getdate(str, NULL);
 	free(str);
 	time = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
 					"timestamp");
@@ -262,6 +292,8 @@ static SCM time_decode(SCM stamp) {
 	}
 
 void init_time(void) {
+	const char *pats = "([0-9][0-9][0-9][0-9])\\-([0-9][0-9])\\-([0-9][0-9])T([0-9][0-9]):([0-9][0-9]):([0-9][0-9])[^+\\-]+([+\\-][0-9][0-9])";
+	regcomp(&time_pat1, pats, REG_EXTENDED);
 	time_tag = scm_make_smob_type("timestamp", sizeof(struct g_time));
 	scm_c_define_gsubr("time-local", 6, 0, 0, local_time);
 	scm_c_define_gsubr("time-now", 0, 0, 0, now_time);
@@ -282,3 +314,7 @@ void init_time(void) {
 	scm_c_define_gsubr("time-decode", 1, 0, 0, time_decode);
 	scm_c_define_gsubr("snooze", 1, 0, 0, snooze);
 	} 
+
+void shutdown_time(void) {
+	regfree(&time_pat1);
+	}

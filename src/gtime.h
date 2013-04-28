@@ -22,3 +22,4 @@ extern scm_t_bits time_tag;
 SCM local_time_intern(int, int, int, int, int, int);
 SCM format_time(SCM, SCM);
 void init_time(void);
+void shutdown_time(void);

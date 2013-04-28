@@ -705,6 +705,7 @@ static void shutdown_env(void) {
 	shutdown_cache();
 	shutdown_inotify();
 	shutdown_http();
+	shutdown_time();
 	shutdown_log();
 	}
 
