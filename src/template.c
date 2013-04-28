@@ -118,5 +118,5 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 	}
 
 void init_template(void) {
-	scm_c_define_gsubr("fill-template", 3, 0, 0, fill_template);
+	scm_c_define_gsubr("fill-template", 2, 0, 1, fill_template);
 	}
