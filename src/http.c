@@ -100,8 +100,8 @@ inline SCM scm_from_string(const char *str) {
 	return scm_from_utf8_string(str);
 	}
 
-static size_t header_handler(void *data, size_t size, size_t n,
-									void *userp) {
+static size_t header_handler(void *data, size_t size,
+			size_t n, void *userp) {
 	char *buf, *pt, *value;
 	size_t rsize;
 	SCM sym, val;
@@ -240,6 +240,7 @@ static SCM http_get(SCM url) {
 	char *surl, errbuf[CURL_ERROR_SIZE];
 	CURLcode res;
 	CNODE *chunks, *next;
+	long rescode;
 	SCM body, headers, reply, chunk;
 	hnode = get_handle();
 	handle = hnode->handle;
@@ -257,10 +258,12 @@ static SCM http_get(SCM url) {
 	curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, errbuf);
 	res = curl_easy_perform(handle);
 	free(surl);
+	curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &rescode);
+	headers = scm_acons(symbol("status"), scm_from_int((int)rescode), headers);
 	release_handle(hnode);
 	if (res != 0) {
 		log_msg("http-get error: %s\n", errbuf);
-		//return SCM_BOOL_F;
+		return SCM_BOOL_F;
 		}
 	body = SCM_EOL;
 	while (chunks != NULL) {
