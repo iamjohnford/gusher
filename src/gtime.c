@@ -19,6 +19,7 @@
 #include <libguile.h>
 #include <time.h>
 #include <math.h>
+#include <curl/curl.h>
 
 struct g_time {
 	struct tm time;
@@ -243,6 +244,23 @@ static SCM snooze(SCM sec) {
 	return (nanosleep(&ts, NULL) == 0 ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
+static SCM time_decode(SCM stamp) {
+	time_t epoch;
+	char *str;
+	struct g_time *time;
+	SCM smob;
+	str = scm_to_locale_string(stamp);
+	epoch = curl_getdate(str, NULL);
+	free(str);
+	time = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
+					"timestamp");
+	localtime_r(&epoch, &(time->time));
+	time->epoch = epoch;
+	time->usec = 0;
+	SCM_NEWSMOB(smob, time_tag, time);
+	return smob;
+	}
+
 void init_time(void) {
 	time_tag = scm_make_smob_type("timestamp", sizeof(struct g_time));
 	scm_c_define_gsubr("time-local", 6, 0, 0, local_time);
@@ -261,5 +279,6 @@ void init_time(void) {
 	scm_c_define_gsubr("time-epoch", 1, 0, 0, time_epoch);
 	scm_c_define_gsubr("time-gmtoffset", 1, 0, 0, time_offset);
 	scm_c_define_gsubr("time-zone", 1, 0, 0, time_zone);
+	scm_c_define_gsubr("time-decode", 1, 0, 0, time_decode);
 	scm_c_define_gsubr("snooze", 1, 0, 0, snooze);
 	} 
