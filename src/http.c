@@ -173,9 +173,10 @@ static SCM walk_tree(xmlNode *node, int level) {
 			if (knode->type == XML_ELEMENT_NODE)
 				kids = scm_cons(walk_tree(knode, level + 1), kids);
 			else if ((knode->type == XML_TEXT_NODE) ||
-						(knode->type == XML_CDATA_SECTION_NODE))
+				(knode->type == XML_CDATA_SECTION_NODE))
 				text = scm_cons(scm_from_string((const char *)
 										knode->content), text);
+			else if (knode->type == XML_COMMENT_NODE);
 			else
 				fprintf(stderr, "NODE TYPE %d\n", knode->type);
 			}
@@ -225,6 +226,7 @@ static SCM process_body(SCM headers, SCM body) {
 		body = json_decode(body);
 	else if (matchn(stype, "application/xml") ||
 			matchn(stype, "application/atom+xml") ||
+			matchn(stype, "application/rss+xml") ||
 			matchn(stype, "text/xml"))
 		body = parse_xml(body);
 	free(stype);
@@ -263,7 +265,7 @@ static SCM http_get(SCM url) {
 	body = SCM_EOL;
 	while (chunks != NULL) {
 		next = chunks->next;
-		chunk = scm_from_utf8_stringn(chunks->content, chunks->size);
+		chunk = scm_from_locale_stringn(chunks->content, chunks->size);
 		free(chunks->content);
 		body = scm_cons(chunk, body);
 		free(chunks);
