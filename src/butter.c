@@ -22,6 +22,8 @@
 #include <stdarg.h>
 
 static SCM radix10;
+static SCM infix;
+static SCM string_cat_proc;
 
 static SCM to_s(SCM obj) {
 	if (scm_is_string(obj)) return obj;
@@ -46,9 +48,34 @@ static SCM to_i(SCM obj) {
 	return scm_from_int(i);
 	}
 
+static SCM string_cat(SCM glue, SCM items) {
+	SCM list, node, item;
+	list = SCM_EOL;
+	node = items;
+	while (node != SCM_EOL) {
+		item = SCM_CAR(node);
+		if (scm_is_string(item))
+			list = scm_cons(item, list);
+		else if (scm_is_number(item))
+			list = scm_cons(scm_number_to_string(item, radix10), list);
+		else if (scm_is_symbol(item))
+			list = scm_cons(scm_symbol_to_string(item), list);
+		else if (scm_list_p(item) == SCM_BOOL_T)
+			list = scm_cons(scm_apply_1(string_cat_proc, glue, item), list);
+		node = SCM_CDR(node);
+		}
+	scm_remember_upto_here_1(list);
+	return scm_string_join(scm_reverse(list), glue, infix);
+	}
+
 void init_butter() {
 	radix10 = scm_from_int(10);
 	scm_gc_protect_object(radix10);
+	infix = scm_from_utf8_symbol("infix");
+	scm_gc_protect_object(infix);
 	scm_c_define_gsubr("to-s", 1, 0, 0, to_s);
 	scm_c_define_gsubr("to-i", 1, 0, 0, to_i);
+	scm_c_define_gsubr("string-cat", 1, 0, 1, string_cat);
+	string_cat_proc = scm_c_eval_string("string-cat");
+	scm_gc_protect_object(string_cat_proc);
 	}
