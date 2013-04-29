@@ -83,6 +83,7 @@ static SCM pmutex;
 static SCM qcondvars;
 static SCM scm_handlers;
 static SCM query_sym;
+static SCM radix10;
 static int nthreads = 0;
 static int busy_threads = 0;
 static int threading;
@@ -238,13 +239,6 @@ static void send_all(int sock, const char *msg) {
 		}
 	}
 
-static char *scm_buf_string(SCM string, char *buf, int size) {
-	size_t n;
-	n = scm_to_locale_stringbuf(string, buf, size);
-	buf[n] = '\0';
-	return buf;
-	}
-
 static SCM simple_http_response(SCM mime_type, SCM content) {
 	SCM headers, resp;
 	char *buf, clen[16];
@@ -272,11 +266,11 @@ static SCM json_http_response(SCM enc_content) {
 	free(buf);
 	headers = SCM_EOL;
 	addlist(headers, scm_cons(scm_from_locale_string("content-length"),
-						scm_from_locale_string(clen)));
+				scm_from_locale_string(clen)));
 	addlist(headers, scm_cons(scm_from_locale_string("cache-control"),
-					scm_from_locale_string("max-age=0, must-revalidate")));
+				scm_from_locale_string("max-age=0, must-revalidate")));
 	addlist(headers, scm_cons(scm_from_locale_string("content-type"),
-						scm_from_locale_string("text/json")));
+				scm_from_locale_string("text/json; charset=UTF-8")));
 	resp = SCM_EOL;
 	addlist(resp, enc_content);
 	addlist(resp, headers);
@@ -437,30 +431,29 @@ static SCM dump_request(SCM request) {
 
 static void send_headers(int sock, SCM headers) {
 	SCM node, pair, val;
-	char buf[1024];
 	char *hname, *hvalue;
 	node = headers;
 	pair = val = SCM_EOL;
 	while (node != SCM_EOL) {
 		pair = SCM_CAR(node);
-		hname = scm_buf_string(SCM_CAR(pair), buf, sizeof(buf));
+		hname = scm_to_latin1_string(SCM_CAR(pair));
 		send_all(sock, hname);
+		free(hname);
 		send_all(sock, ": ");
-//printf("%s: ", hname);
 		val = SCM_CDR(pair);
 		if (scm_is_string(val))
-			hvalue = scm_buf_string(val, buf, sizeof(buf));
+			hvalue = scm_to_latin1_string(val);
 		else if (scm_is_number(val))
-			hvalue = scm_buf_string(scm_number_to_string(val,
-										scm_from_int(10)),
-									buf, sizeof(buf));
+			hvalue = scm_to_latin1_string(
+						scm_number_to_string(val, radix10));
 		else if (scm_is_symbol(val))
-			hvalue = scm_buf_string(scm_symbol_to_string(val),
-									buf, sizeof(buf));
-		else strcpy(hvalue = buf, "foobar");
-		send_all(sock, hvalue);
+			hvalue = scm_to_latin1_string(scm_symbol_to_string(val));
+		else hvalue = NULL;
+		if (hvalue != NULL) {
+			send_all(sock, hvalue);
+			free(hvalue);
+			}
 		send_all(sock, "\r\n");
-//printf("%s\n", hvalue);
 		node = SCM_CDR(node);
 		}
 	send_all(sock, "\r\n");
@@ -480,8 +473,8 @@ static SCM run_responder(SCM request) {
 			snprintf(buf, sizeof(buf) - 1, "%s=%s; Path=/",
 							COOKIE_KEY, cookie);
 			buf[sizeof(buf) - 1] = '\0';
-			cookie_header = scm_cons(scm_from_locale_string("set-cookie"),
-				scm_from_locale_string(buf));
+			cookie_header = scm_cons(scm_from_latin1_string("set-cookie"),
+				scm_from_latin1_string(buf));
 			}
 		if (get_session(cookie) == SCM_BOOL_F) {
 			SCM session;
@@ -509,7 +502,7 @@ static SCM run_responder(SCM request) {
 static void process_request(RFRAME *frame) {
 	char buf[4096];
 	size_t avail;
-	char *mark, *pt, *colon;
+	char *mark, *pt, *colon, *status;
 	int eoh, sock;
 	SCM request;
 	sock = frame->sock;
@@ -550,7 +543,9 @@ static void process_request(RFRAME *frame) {
 	reply = SCM_CDR(reply);
 	//-----------------------
 	send_all(sock, "HTTP/1.1 ");
-	send_all(sock, scm_buf_string(SCM_CAR(reply), buf, sizeof(buf)));
+	status = scm_to_latin1_string(SCM_CAR(reply));
+	send_all(sock, status);
+	free(status);
 	send_all(sock, "\r\n");
 	reply = SCM_CDR(reply);
 	SCM headers = SCM_CAR(reply);
@@ -558,8 +553,8 @@ static void process_request(RFRAME *frame) {
 		headers = scm_cons(cookie_header, headers);
 	send_headers(sock, headers); // headers
 	reply = SCM_CDR(reply);
-	char *body = scm_to_locale_string(SCM_CAR(reply));
-	send_all(sock, body); // body
+	char *body = scm_to_utf8_string(SCM_CAR(reply));
+	send_all(sock, body);
 	free(body);
 //printf("SEND BODY\n");
 	close(sock);
@@ -647,6 +642,8 @@ printf("ADD THREAD: %d\n", nthreads);
 static void init_env(void) {
 	char *here, pats[64];
 	struct stat bstat;
+	radix10 = scm_from_int(10);
+	scm_gc_protect_object(radix10);
 	scm_c_define_gsubr("http", 2, 0, 0, set_handler);
 	scm_c_define_gsubr("not-found", 1, 0, 0, dump_request);
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
