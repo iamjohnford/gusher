@@ -32,13 +32,12 @@
 typedef struct hnode {
 	CURL *handle;
 	struct hnode *next;
-	char domain[];
 	} HNODE;
 
 typedef struct cnode {
 	struct cnode *next;
-	char *content;
 	size_t size;
+	char content[];
 	} CNODE;
 
 static HNODE *hpool = NULL;
@@ -77,12 +76,11 @@ static void release_handle(HNODE *node) {
 	}
 
 static size_t write_handler(void *buffer, size_t size,
-							size_t n, void *userp) {
+				size_t n, void *userp) {
 	size_t rsize;
 	CNODE *node;
 	rsize = size * n;
-	node = (CNODE *)malloc(sizeof(CNODE));
-	node->content = (char *)malloc(rsize);
+	node = (CNODE *)malloc(sizeof(CNODE) + rsize);
 	memcpy(node->content, buffer, rsize);
 	node->size = rsize;
 	node->next = *((CNODE **)userp);
@@ -119,7 +117,7 @@ static size_t header_handler(void *data, size_t size,
 		if (pt == value) break;
 		pt--;
 		}
-	val = scm_from_string(value);
+	val = scm_from_latin1_string(value);
 	*((SCM *)userp) = scm_acons(sym, val, *((SCM *)userp));
 	scm_remember_upto_here_2(sym, val);
 	return rsize;
@@ -237,11 +235,12 @@ static SCM process_body(SCM headers, SCM body) {
 static SCM http_get(SCM url) {
 	HNODE *hnode;
 	CURL *handle;
-	char *surl, errbuf[CURL_ERROR_SIZE];
+	char *surl, errbuf[CURL_ERROR_SIZE], *bag, *pt;
 	CURLcode res;
 	CNODE *chunks, *next;
 	long rescode;
-	SCM body, headers, reply, chunk;
+	size_t tsize;
+	SCM body, headers, reply;
 	hnode = get_handle();
 	handle = hnode->handle;
 	chunks = NULL;
@@ -259,22 +258,28 @@ static SCM http_get(SCM url) {
 	res = curl_easy_perform(handle);
 	free(surl);
 	curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &rescode);
-	headers = scm_acons(symbol("status"), scm_from_int((int)rescode), headers);
+	headers = scm_acons(symbol("status"), scm_from_int((int)rescode),
+				headers);
 	release_handle(hnode);
 	if (res != 0) {
 		log_msg("http-get error: %s\n", errbuf);
 		return SCM_BOOL_F;
 		}
 	body = SCM_EOL;
+	tsize = 0;
+	for (next = chunks; next != NULL; next = next->next)
+		tsize += next->size;
+	bag = (char *)malloc(tsize + 1);
+	pt = &bag[tsize];
 	while (chunks != NULL) {
 		next = chunks->next;
-		chunk = scm_from_locale_stringn(chunks->content, chunks->size);
-		free(chunks->content);
-		body = scm_cons(chunk, body);
+		pt -= chunks->size;
+		memcpy(pt, chunks->content, chunks->size);
 		free(chunks);
 		chunks = next;
 		}
-	body = join_strings(body, 0);
+	body = scm_from_utf8_stringn(bag, tsize);
+	free(bag);
 	reply = scm_cons(headers, process_body(headers, body));
 	scm_remember_upto_here_1(headers);
 	scm_remember_upto_here_2(body, reply);
