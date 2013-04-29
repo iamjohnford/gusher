@@ -28,7 +28,7 @@ static char *make_key(SCM obj) {
 	SCM string;
 	if (scm_is_string(obj)) string = obj;
 	else string = scm_symbol_to_string(obj);
-	return scm_to_locale_string(string);
+	return scm_to_utf8_string(string);
 	}
 
 static json_t *json_build(SCM obj) {
@@ -36,12 +36,12 @@ static json_t *json_build(SCM obj) {
 	SCM node;
 	char *buf;
 	if (scm_is_string(obj)) {
-		buf = scm_to_locale_string(obj);
+		buf = scm_to_utf8_string(obj);
 		jobj = json_string(buf);
 		free(buf);
 		}
 	else if (scm_is_symbol(obj)) {
-		buf = scm_to_locale_string(scm_symbol_to_string(obj));
+		buf = scm_to_utf8_string(scm_symbol_to_string(obj));
 		jobj = json_string(buf);
 		free(buf);
 		}
@@ -75,8 +75,8 @@ static json_t *json_build(SCM obj) {
 					json_build(SCM_CAR(node)));
 		}
 	else if (SCM_SMOB_PREDICATE(time_tag, obj)) {
-		buf = scm_to_locale_string(format_time(obj,
-			scm_from_locale_string("%Y-%m-%d %H:%M:%S")));
+		buf = scm_to_utf8_string(format_time(obj,
+			scm_from_utf8_string("%Y-%m-%d %H:%M:%S")));
 		jobj = json_string(buf);
 		free(buf);
 		}
@@ -88,6 +88,7 @@ static json_t *json_build(SCM obj) {
 SCM json_encode(SCM obj) {
 	char *buf;
 	int n;
+	SCM out;
 	json_t *root;
 	root = json_build(obj);
 	scm_remember_upto_here_1(obj);
@@ -98,7 +99,10 @@ SCM json_encode(SCM obj) {
 		log_msg("JSON encode failed\n");
 		return SCM_BOOL_F;
 		}
-	return scm_take_locale_string(buf);
+	out = scm_from_utf8_string(buf);
+	free(buf);
+	scm_remember_upto_here_1(out);
+	return out;
 	}
 
 static SCM parse(json_t *obj) {
@@ -108,7 +112,7 @@ static SCM parse(json_t *obj) {
 	SCM list;
 	list = SCM_EOL;
 	if (json_is_string(obj))
-		return scm_from_locale_string(json_string_value(obj));
+		return scm_from_utf8_string(json_string_value(obj));
 	if (json_is_integer(obj))
 		return scm_from_int((int)json_integer_value(obj));
 	if (json_is_real(obj))
@@ -129,7 +133,7 @@ static SCM parse(json_t *obj) {
 		list = SCM_EOL;
 		sym = SCM_EOL;
 		json_object_foreach(obj, key, val) {
-			sym = scm_from_locale_symbol(key);
+			sym = scm_from_utf8_symbol(key);
 			list = scm_acons(sym, parse(val), list);
 			}
 		scm_remember_upto_here_1(sym);
@@ -143,7 +147,7 @@ SCM json_decode(SCM string) {
 	char *buf;
 	json_t *root;
 	json_error_t err;
-	buf = scm_to_locale_string(string);
+	buf = scm_to_utf8_string(string);
 	scm_remember_upto_here_1(string);
 	root = json_loads(buf, 0, &err);
 	free(buf);
