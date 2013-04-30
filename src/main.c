@@ -565,6 +565,33 @@ static void process_request(RFRAME *frame) {
 	return;
 	}
 
+static SCM body_req(void *data) {
+	process_request((RFRAME *)data);
+	return SCM_BOOL_T;
+	}
+
+static const char *err_msg = "HTTP/1.1 500 Internal Server Error\r\nContent-type: text/plain\r\n\r\nwuh-oh! gusher application error\r\n";
+
+static SCM catch_req(void *data, SCM key, SCM params) {
+	RFRAME *frame;
+	char *buf;
+	SCM format;
+	frame = (RFRAME *)data;
+	format = scm_c_public_ref("guile", "format");
+	buf = scm_to_locale_string(scm_call_3(format, SCM_BOOL_F,
+		scm_from_locale_string("~s"), key));
+	log_msg("ERROR: %s\n", buf);
+	free(buf);
+	buf = scm_to_locale_string(scm_call_3(format, SCM_BOOL_F,
+		scm_from_locale_string("~s"), params));
+	log_msg("DETAIL: %s\n", buf);
+	free(buf);
+	send_all(frame->sock, err_msg);
+	close(frame->sock);
+	scm_remember_upto_here_1(format);
+	return SCM_BOOL_T;
+	}
+
 static SCM dispatcher(void *data) {
 	unsigned long id;
 	RFRAME *frame;
@@ -597,7 +624,10 @@ printf("start thread %08lx\n", id);
 		req_queue = req_queue->next;
 		busy_threads++;
 		scm_unlock_mutex(qmutex);
-		process_request(frame);
+		scm_c_catch(SCM_BOOL_T,
+			body_req, (void *)frame,
+			catch_req, (void *)frame,
+			NULL, NULL);
 		//scm_lock_mutex(qmutex);
 		busy_threads--;
 		//scm_unlock_mutex(qmutex);
