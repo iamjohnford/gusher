@@ -10,5 +10,8 @@ install-data-local:
 	mkdir -p $(lib1dir)/signals
 	chown -R root:gusher $(lib1dir)
 	chmod -R g+sw $(lib1dir)
+	mkdir -p /var/log/gusher
+	chown -R root:gusher /var/log/gusher
+	chmod -R g+sw /var/log/gusher
 
 AM_CFLAGS = -Wall -I/usr/local/include/guile/2.0 -I/usr/include/libxml2 -DLOCALLIB=\"$(libdir)\"
