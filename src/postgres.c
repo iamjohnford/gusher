@@ -41,6 +41,7 @@ struct pg_res {
 
 static scm_t_bits pg_conn_tag;
 static scm_t_bits pg_res_tag;
+static SCM dbh_mutex;
 
 static SCM pg_open(SCM conninfo) {
 	SCM smob;
@@ -65,8 +66,10 @@ static SCM pg_close(SCM conn) {
 	struct pg_conn *pgc;
 	scm_assert_smob_type(pg_conn_tag, conn);
 	pgc = (struct pg_conn *)SCM_SMOB_DATA(conn);
+	scm_lock_mutex(dbh_mutex);
 	if (pgc->conn != NULL) PQfinish(pgc->conn);
 	pgc->conn = NULL;
+	scm_unlock_mutex(dbh_mutex);
 	return SCM_UNSPECIFIED;
 	}
 
@@ -81,8 +84,9 @@ static SCM pg_exec(SCM conn, SCM query) {
 	pgr = (struct pg_res *)scm_gc_malloc(sizeof(struct pg_res),
 					"pg_res");
 	query_s = scm_to_locale_string(query);
+	scm_lock_mutex(dbh_mutex);
 	pgr->res = PQexec(pgc->conn, query_s);
-	scm_remember_upto_here_1(conn);
+	scm_unlock_mutex(dbh_mutex);
 	free(query_s);
 	pgr->cursor = 0;
 	pgr->fields = SCM_EOL;
@@ -319,9 +323,11 @@ static SCM pg_format_sql(SCM conn, SCM obj) {
 			char *src = scm_to_locale_string(obj);
 			scm_assert_smob_type(pg_conn_tag, conn);
 			pgc = (struct pg_conn *)SCM_SMOB_DATA(conn);
+			scm_lock_mutex(dbh_mutex);
 			char *sql = PQescapeLiteral(pgc->conn,
 					src, strlen(src));
 			out = c2s(sql);
+			scm_unlock_mutex(dbh_mutex);
 			free(src);
 			PQfreemem(sql);
 			}
@@ -342,6 +348,8 @@ void init_postgres(void) {
 	pg_res_tag = scm_make_smob_type("pg_res", sizeof(struct pg_res));
 	scm_set_smob_free(pg_res_tag, free_pg_res);
 	scm_set_smob_mark(pg_res_tag, mark_pg_res);
+	dbh_mutex = scm_make_mutex();
+	scm_gc_protect_object(dbh_mutex);
 	scm_c_define_gsubr("pg-open", 1, 0, 0, pg_open);
 	scm_c_define_gsubr("pg-close", 1, 0, 0, pg_close);
 	scm_c_define_gsubr("pg-exec", 2, 0, 0, pg_exec);
