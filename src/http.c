@@ -123,12 +123,11 @@ static size_t header_handler(void *data, size_t size,
 	return rsize;
 	}
 
-static SCM join_strings(SCM list, int trim) {
+static SCM trim_cat(SCM list) {
 	SCM joined;
 	char *buf, *pt;
 	int trimmed;
 	joined = scm_string_join(list, scm_from_string(""), infix);
-	if (!trim) return joined;
 	trimmed = 0;
 	buf = scm_to_utf8_string(joined);
 	pt = buf + strlen(buf) - 1;
@@ -147,46 +146,42 @@ static SCM walk_tree(xmlNode *node, int level) {
 	xmlNode *knode;
 	xmlAttr *attr;
 	const char *name;
-	SCM snode, kids, text, attribs, joined;
-	snode = SCM_EOL;
-	text = SCM_EOL;
-	attribs = SCM_EOL;
-	kids = SCM_EOL;
+	SCM snode, text, attribs, elements;
 	if (node->name != NULL) name = (const char *)node->name;
 	else name = "no-name";
-	snode = scm_acons(symbol("name"),
-			scm_from_string(name),
-			snode);
-	if (node->properties != NULL) {
-		for (attr = node->properties; attr; attr = attr->next) {
-			attribs = scm_acons(symbol((const char *)attr->name),
-					scm_from_string((const char *)
-										attr->children->content),
-					attribs);
-			}
-		}
-	snode = scm_acons(symbol("attrs"), attribs, snode);
+	text = SCM_EOL;
+	elements = SCM_EOL;
 	if (node->children != NULL) {
 		for (knode = node->children; knode; knode = knode->next) {
 			if (knode->type == XML_ELEMENT_NODE)
-				kids = scm_cons(walk_tree(knode, level + 1), kids);
+				elements = scm_cons(walk_tree(knode, level + 1), elements);
 			else if ((knode->type == XML_TEXT_NODE) ||
-				(knode->type == XML_CDATA_SECTION_NODE))
+					(knode->type == XML_CDATA_SECTION_NODE)) {
 				text = scm_cons(scm_from_string((const char *)
 										knode->content), text);
+				}
 			else if (knode->type == XML_COMMENT_NODE);
 			else
 				fprintf(stderr, "NODE TYPE %d\n", knode->type);
 			}
 		}
-	snode = scm_acons(symbol("items"), kids, snode);
-	if (!scm_is_null(text)) {
-		joined = join_strings(scm_reverse(text), 1);
-		if (scm_c_string_length(joined) > 0)
-			snode = scm_acons(symbol("content"), joined, snode);
-		scm_remember_upto_here_1(joined);
+	snode = scm_cons(
+		scm_is_null(elements) ?
+			trim_cat(scm_reverse(text)) :
+			scm_reverse(elements),
+		SCM_EOL);
+	attribs = SCM_EOL;
+	if (node->properties != NULL) {
+		for (attr = node->properties; attr; attr = attr->next) {
+			attribs = scm_acons(symbol((const char *)attr->name),
+					scm_from_string((const char *)
+								attr->children->content),
+					attribs);
+			}
 		}
-	scm_remember_upto_here_2(snode, kids);
+	snode = scm_cons(attribs, snode);
+	snode = scm_cons(symbol(name), snode);
+	scm_remember_upto_here_2(snode, elements);
 	scm_remember_upto_here_2(text, attribs);
 	return snode;
 	}
