@@ -825,10 +825,16 @@ static void enqueue_frame(RFRAME *frame) {
 static void process_http(int sock) {
 	socklen_t size;
 	RFRAME *frame;
+	int fsock;
 	struct sockaddr_in client;
 	size = sizeof(struct sockaddr_in);
+	fsock = accept(sock, (struct sockaddr *)&client, &size);
+	if (fsock < 0) {
+		log_msg("accept: %s [%d]\n", strerror(errno), errno);
+		return;
+		}
 	frame = get_frame();
-	frame->sock = accept(sock, (struct sockaddr *)&client, &size);
+	frame->sock = fsock;
 	strcpy(frame->ipaddr, inet_ntoa(client.sin_addr));
 	frame->rport = ntohs(client.sin_port);
 	frame->count = tcount;
