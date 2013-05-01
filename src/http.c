@@ -281,12 +281,27 @@ static SCM http_get(SCM url) {
 	return reply;
 	}
 
+static SCM xml_node_name(SCM xml_doc) {
+	return SCM_CAR(xml_doc);
+	}
+
+static SCM xml_node_attrs(SCM xml_doc) {
+	return SCM_CAR(SCM_CDR(xml_doc));
+	}
+
+static SCM xml_node_content(SCM xml_doc) {
+	return SCM_CAR(SCM_CDR(SCM_CDR(xml_doc)));
+	}
+
 void init_http() {
 	curl_global_init(CURL_GLOBAL_ALL);
 	infix = symbol("infix");
 	scm_gc_protect_object(infix);
 	scm_gc_protect_object(mutex = scm_make_mutex());
 	scm_c_define_gsubr("http-get", 1, 0, 0, http_get);
+	scm_c_define_gsubr("xml-node-name", 1, 0, 0, xml_node_name);
+	scm_c_define_gsubr("xml-node-attrs", 1, 0, 0, xml_node_attrs);
+	scm_c_define_gsubr("xml-node-content", 1, 0, 0, xml_node_content);
 	}
 
 void shutdown_http() {
