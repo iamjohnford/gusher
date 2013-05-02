@@ -83,7 +83,7 @@ static SCM pg_exec(SCM conn, SCM query) {
 	pgc = (struct pg_conn *)SCM_SMOB_DATA(conn);
 	pgr = (struct pg_res *)scm_gc_malloc(sizeof(struct pg_res),
 					"pg_res");
-	query_s = scm_to_locale_string(query);
+	query_s = scm_to_utf8_string(query);
 	scm_lock_mutex(dbh_mutex);
 	pgr->res = PQexec(pgc->conn, query_s);
 	scm_unlock_mutex(dbh_mutex);
@@ -320,7 +320,7 @@ static SCM pg_format_sql(SCM conn, SCM obj) {
 	else if (scm_is_string(obj)) {
 		if (scm_string_null_p(obj) == SCM_BOOL_T) out = c2s("NULL");
 		else {
-			char *src = scm_to_locale_string(obj);
+			char *src = scm_to_utf8_string(obj);
 			scm_assert_smob_type(pg_conn_tag, conn);
 			pgc = (struct pg_conn *)SCM_SMOB_DATA(conn);
 			scm_lock_mutex(dbh_mutex);
