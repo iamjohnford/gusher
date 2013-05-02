@@ -192,7 +192,12 @@ static SCM parse_xml(SCM doc) {
 	xmlDoc *xmldoc;
 	xmlNode *root;
 	buf = scm_to_utf8_string(doc);
-	xmldoc = xmlReadMemory(buf, strlen(buf), NULL, NULL, 0);
+	xmldoc = xmlReadMemory(buf, strlen(buf), NULL, NULL,
+		XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
+	if (xmldoc == NULL) {
+		free(buf);
+		return SCM_BOOL_F;
+		}
 	root = xmlDocGetRootElement(xmldoc);
 	tree = walk_tree(root, 0);
 	xmlFreeDoc(xmldoc);
