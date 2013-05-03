@@ -10,6 +10,6 @@
 (define (http-json path responder)
 	(http path
 		(lambda (req)
-			(let ((body (json-encode (responder req))))
+			(let ([body (json-encode (responder req))])
 				(json-response body)))))
 
