@@ -169,7 +169,7 @@ static struct inotify_event *read_event(int fd) {
 	char *buf, *pt;
 	struct inotify_event *ev;
 	char hdr[256];
-	read(fd, hdr, sizeof(hdr));
+	if (read(fd, hdr, sizeof(hdr)) < 1) return NULL;
 	ev = (struct inotify_event *)hdr;
 	want = ev->len;
 	buf = (char *)malloc(sizeof(struct inotify_event) + want);
@@ -177,6 +177,7 @@ static struct inotify_event *read_event(int fd) {
 	pt = ((struct inotify_event *)buf)->name;
 	while (want > 0) {
 		got = read(fd, pt, want);
+		if (got < 1) break;
 		want -= got;
 		pt += got;
 		}
@@ -219,7 +220,7 @@ void process_inotify_event() {
 	SCM node, tuple, msg;
 	int wd;
 	char *sigfile;
-	event = read_event(inotify_fd);
+	if ((event = read_event(inotify_fd)) == NULL) return;
 	wd = event->wd;
 	free(event);
 	sigfile = NULL;
