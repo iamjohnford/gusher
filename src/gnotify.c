@@ -25,15 +25,18 @@
 #include <sys/file.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <math.h>
 
 #include "log.h"
 
 #define SIGBUFSIZE 1024
+#define MAX_SNOOZE 20.0
 
 int inotify_fd = -1;
 extern char gusher_root[];
 static char signals_root[PATH_MAX];
 static SCM watch_nodes;
+static int pulsing = 0;
 
 SCM add_watch(SCM path, SCM mask, SCM handler) {
 	char *spath;
@@ -237,6 +240,50 @@ void process_inotify_event() {
 	return;
 	}
 
+static SCM pulsar(void *data) {
+	char sigpath[PATH_MAX];
+	struct timeval tod;
+	struct timespec nap;
+	int interval, partial;
+	//time_t now;
+	double pnow, wake, snooze;
+	interval = *((int *)data);
+	sprintf(sigpath, "%s/pulse", signals_root);
+	pulsing = 1;
+	while (pulsing) {
+		gettimeofday(&tod, NULL);
+		pnow = tod.tv_sec + tod.tv_usec / 1000000.0;
+		wake = (tod.tv_sec / interval + 1) * interval;
+		if ((snooze = wake - pnow) > MAX_SNOOZE) {
+			partial = 1;
+			snooze = MAX_SNOOZE;
+			}
+		else partial = 0;
+		nap.tv_sec = (int)floor(snooze);
+		nap.tv_nsec = (snooze - nap.tv_sec) * 1000000000;
+		if ((nanosleep(&nap, NULL) == 0) && !partial) {
+			write_signal(sigpath, NULL);
+			/*gettimeofday(&tod, NULL);
+			now = (time_t)round(tod.tv_sec + tod.tv_usec / 1000000.0);
+			printf("pulse! %s", ctime(&now));*/
+			}
+		}
+	return SCM_UNSPECIFIED;
+	}
+
+static SCM start_pulse(SCM interval) {
+	int sec;
+	if (pulsing) return SCM_BOOL_F;
+	sec = scm_to_int(interval);
+	scm_spawn_thread(pulsar, (void *)&sec, NULL, NULL);
+	return SCM_BOOL_T;
+	}
+
+static SCM stop_pulse() {
+	pulsing = 0;
+	return SCM_UNSPECIFIED;
+	}
+
 void init_inotify() {
 	inotify_fd = inotify_init();
 	watch_nodes = SCM_EOL;
@@ -260,6 +307,8 @@ void init_inotify() {
 	scm_c_define_gsubr("signal-subscribe", 2, 0, 0, signal_subscribe);
 	scm_c_define_gsubr("signal-touch", 1, 0, 1, signal_touch);
 	scm_c_define_gsubr("signal-msg", 1, 0, 0, get_signal_msg);
+	scm_c_define_gsubr("start-pulse", 1, 0, 0, start_pulse);
+	scm_c_define_gsubr("stop-pulse", 0, 0, 0, stop_pulse);
 	}
 
 void shutdown_inotify() {
