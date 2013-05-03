@@ -48,7 +48,6 @@
 #include "butter.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
-#define addlist(list,item) (list=scm_cons((item),(list)))
 #define DEFAULT_PORT 8080
 #define BOOT_FILE "boot.scm"
 #define COOKIE_KEY "GUSHERID"
@@ -135,11 +134,6 @@ static char *downcase(char *buf) {
 	return buf;
 	}
 
-inline SCM sym_string(const char *symbol, const char *value) {
-	return scm_cons(makesym(symbol),
-			scm_from_locale_string(value));
-	}
-
 static char decode_hex(char *code) {
 	int c;
 	if (isalpha(code[0])) c = (toupper(code[0]) - 'A' + 10);
@@ -179,7 +173,8 @@ static SCM parse_query(char *query) {
 			}
 		if ((eq = index(mark, '=')) != NULL) {
 			*eq++ = '\0';
-			addlist(list, sym_string(mark, decode_query(eq)));
+			list = scm_acons(makesym(mark),
+				scm_from_locale_string(decode_query(eq)), list);
 			}
 		if (next == NULL) break;
 		mark = next;
@@ -241,40 +236,34 @@ static void send_all(int sock, const char *msg) {
 
 static SCM simple_http_response(SCM mime_type, SCM content) {
 	SCM headers, resp;
-	char *buf, clen[16];
-	buf = scm_to_locale_string(content);
-	sprintf(clen, "%ld", strlen(buf));
-	free(buf);
 	headers = SCM_EOL;
-	addlist(headers, scm_cons(scm_from_locale_string("content-length"),
-						scm_from_locale_string(clen)));
-	addlist(headers, scm_cons(scm_from_locale_string("content-type"),
-						mime_type));
+	headers = scm_acons(scm_from_locale_string("content-length"),
+							scm_string_length(content), headers);
+	headers = scm_acons(scm_from_locale_string("content-type"),
+						mime_type, headers);
 	resp = SCM_EOL;
-	addlist(resp, content);
-	addlist(resp, headers);
-	addlist(resp, scm_from_locale_string("200 OK"));
+	resp = scm_cons(content, resp);
+	resp = scm_cons(headers, resp);
+	resp = scm_cons(scm_from_locale_string("200 OK"), resp);
 	scm_remember_upto_here_2(headers, resp);
 	return resp;
 	}
 
 static SCM json_http_response(SCM enc_content) {
 	SCM headers, resp;
-	char *buf, clen[16];
-	buf = scm_to_locale_string(enc_content);
-	sprintf(clen, "%ld", strlen(buf));
-	free(buf);
 	headers = SCM_EOL;
-	addlist(headers, scm_cons(scm_from_locale_string("content-length"),
-				scm_from_locale_string(clen)));
-	addlist(headers, scm_cons(scm_from_locale_string("cache-control"),
-				scm_from_locale_string("max-age=0, must-revalidate")));
-	addlist(headers, scm_cons(scm_from_locale_string("content-type"),
-				scm_from_locale_string("text/json; charset=UTF-8")));
+	headers = scm_acons(scm_from_locale_string("content-length"),
+							scm_string_length(enc_content), headers);
+	headers = scm_acons(scm_from_locale_string("cache-control"),
+				scm_from_locale_string("max-age=0, must-revalidate"),
+				headers);
+	headers = scm_acons(scm_from_locale_string("content-type"),
+				scm_from_locale_string("text/json; charset=UTF-8"),
+				headers);
 	resp = SCM_EOL;
-	addlist(resp, enc_content);
-	addlist(resp, headers);
-	addlist(resp, scm_from_locale_string("200 OK"));
+	resp = scm_cons(enc_content, resp);
+	resp = scm_cons(headers, resp);
+	resp = scm_cons(scm_from_locale_string("200 OK"), resp);
 	scm_remember_upto_here_2(headers, resp);
 	return resp;
 	}
