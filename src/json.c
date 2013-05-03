@@ -51,6 +51,8 @@ static json_t *json_build(SCM obj) {
 		jobj = json_integer(scm_to_int(obj));
 	else if (scm_real_p(obj) == SCM_BOOL_T)
 		jobj = json_real(scm_to_double(obj));
+	else if (scm_is_null(obj))
+		jobj = json_null();
 	else if ((scm_list_p(obj) == SCM_BOOL_T) &&
 			(!scm_is_null(obj)) &&
 			(scm_pair_p(SCM_CAR(obj)) == SCM_BOOL_T)) {
