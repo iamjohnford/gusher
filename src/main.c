@@ -237,8 +237,6 @@ static void send_all(int sock, const char *msg) {
 static SCM simple_http_response(SCM mime_type, SCM content) {
 	SCM headers, resp;
 	headers = SCM_EOL;
-	headers = scm_acons(scm_from_locale_string("content-length"),
-							scm_string_length(content), headers);
 	headers = scm_acons(scm_from_locale_string("content-type"),
 						mime_type, headers);
 	resp = SCM_EOL;
@@ -252,8 +250,6 @@ static SCM simple_http_response(SCM mime_type, SCM content) {
 static SCM json_http_response(SCM enc_content) {
 	SCM headers, resp;
 	headers = SCM_EOL;
-	headers = scm_acons(scm_from_locale_string("content-length"),
-							scm_string_length(enc_content), headers);
 	headers = scm_acons(scm_from_locale_string("cache-control"),
 				scm_from_locale_string("max-age=0, must-revalidate"),
 				headers);
@@ -491,7 +487,7 @@ static SCM run_responder(SCM request) {
 static void process_request(RFRAME *frame) {
 	char buf[4096];
 	size_t avail;
-	char *mark, *pt, *colon, *status;
+	char *mark, *pt, *colon, *status, *body;
 	int eoh, sock;
 	SCM request;
 	sock = frame->sock;
@@ -540,12 +536,14 @@ static void process_request(RFRAME *frame) {
 	SCM headers = SCM_CAR(reply);
 	if (cookie_header != SCM_BOOL_F)
 		headers = scm_cons(cookie_header, headers);
-	send_headers(sock, headers); // headers
 	reply = SCM_CDR(reply);
-	char *body = scm_to_utf8_string(SCM_CAR(reply));
+	body = scm_to_utf8_string(SCM_CAR(reply));
+	headers = scm_acons(scm_from_latin1_string("content-length"),
+						scm_from_int(strlen(body)),
+						headers);
+	send_headers(sock, headers); // headers
 	send_all(sock, body);
 	free(body);
-//printf("SEND BODY\n");
 	close(sock);
 	scm_remember_upto_here_1(request);
 	scm_remember_upto_here_1(reply);
