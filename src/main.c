@@ -585,7 +585,7 @@ static SCM dispatcher(void *data) {
 	SCM condvar;
 	time_t now;
 	id = (unsigned long)scm_current_thread();
-printf("start thread %08lx\n", id);
+	log_msg("start thread %08lx\n", id);
 	condvar = scm_make_condition_variable();
 	scm_permanent_object(condvar);
 	if (qcondvars != SCM_EOL) scm_gc_unprotect_object(qcondvars);
@@ -651,7 +651,7 @@ static void add_thread() {
 	threads = scm_cons(thread, threads);
 	scm_gc_protect_object(threads);
 	nthreads++;
-printf("ADD THREAD: %d\n", nthreads);
+	log_msg("ADD THREAD: %d\n", nthreads);
 	scm_remember_upto_here_1(thread);
 	return;
 	}
