@@ -30,6 +30,8 @@ static SCM to_s(SCM obj) {
 	if (scm_is_number(obj)) return scm_number_to_string(obj, radix10);
 	if (scm_is_symbol(obj)) return scm_symbol_to_string(obj);
 	if (scm_is_null(obj)) return scm_from_locale_string("");
+	if (obj == SCM_BOOL_T) return scm_from_locale_string("true");
+	if (obj == SCM_BOOL_F) return scm_from_locale_string("false");
 	return obj;
 	}
 
