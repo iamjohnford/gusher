@@ -32,7 +32,7 @@ void log_msg(const char *format, ...) {
 	scm_lock_mutex(lmutex);
 	now = time(NULL);
 	lt = localtime(&now);
-	fprintf(logfile, "%d/%02d/%02d %02d:%02d:%02d ",
+	fprintf(logfile, "%d-%02d-%02d %02d:%02d:%02d ",
 		lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday,
 		lt->tm_hour, lt->tm_min, lt->tm_sec);
 	va_start(args, format);
