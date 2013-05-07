@@ -228,7 +228,7 @@ static SCM make_doc(SCM ingredients, SCM recipe) {
 		cursor = SCM_CDR(cursor);
 		}
 	scm_remember_upto_here_2(ingredients, recipe);
-	scm_remember_upto_here_1(smob);
+	scm_remember_upto_here_2(smob, cursor);
 	return smob;
 	}
 
@@ -323,7 +323,7 @@ static SCM kv_keys(SCM db) {
 		kcfree(keys[n]);
 		}
 	free(keys);
-	scm_remember_upto_here_1(list);
+	scm_remember_upto_here_2(list, db);
 	return list;
 	}
 

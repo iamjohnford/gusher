@@ -68,7 +68,9 @@ SCM add_watch(SCM path, SCM mask, SCM handler) {
 	scm_gc_protect_object(newlist);
 	watch_nodes = newlist;
 	free(spath);
-	scm_remember_upto_here_1(tuple);
+	scm_remember_upto_here_2(tuple, newlist);
+	scm_remember_upto_here_2(path, mask);
+	scm_remember_upto_here_1(handler);
 	return SCM_BOOL_T;
 	}
 
@@ -122,6 +124,7 @@ SCM signal_subscribe(SCM signal, SCM handler) {
 	if (watch_nodes != SCM_EOL) scm_gc_unprotect_object(watch_nodes);
 	watch_nodes = newlist;
 	scm_remember_upto_here_2(tuple, newlist);
+	scm_remember_upto_here_2(signal, handler);
 	return SCM_BOOL_T;
 	}
 

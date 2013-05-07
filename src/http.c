@@ -138,7 +138,7 @@ static SCM trim_cat(SCM list) {
 	for (pt = buf; *pt && isspace(*pt); pt++) trimmed = 1;
 	joined = scm_from_string(trimmed ? pt : buf);
 	free(buf);
-	scm_remember_upto_here_1(joined);
+	scm_remember_upto_here_2(joined, list);
 	return joined;
 	}
 
@@ -203,7 +203,7 @@ static SCM parse_xml(SCM doc) {
 	xmlFreeDoc(xmldoc);
 	xmlCleanupParser();
 	free(buf);
-	scm_remember_upto_here_1(tree);
+	scm_remember_upto_here_2(tree, doc);
 	return tree;
 	}
 
@@ -281,7 +281,7 @@ static SCM http_get(SCM url) {
 	body = scm_from_utf8_stringn(bag, tsize);
 	free(bag);
 	reply = scm_cons(headers, process_body(headers, body));
-	scm_remember_upto_here_1(headers);
+	scm_remember_upto_here_2(headers, url);
 	scm_remember_upto_here_2(body, reply);
 	return reply;
 	}

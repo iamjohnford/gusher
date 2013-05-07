@@ -28,6 +28,7 @@ static char *make_key(SCM obj) {
 	SCM string;
 	if (scm_is_string(obj)) string = obj;
 	else string = scm_symbol_to_string(obj);
+	scm_remember_upto_here_2(obj, string);
 	return scm_to_utf8_string(string);
 	}
 

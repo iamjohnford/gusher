@@ -54,6 +54,7 @@ static SCM string_cat(SCM glue, SCM items) {
 	SCM list, node, item;
 	list = SCM_EOL;
 	node = items;
+	item = SCM_EOL;
 	while (node != SCM_EOL) {
 		item = SCM_CAR(node);
 		if (scm_is_string(item))
@@ -67,6 +68,8 @@ static SCM string_cat(SCM glue, SCM items) {
 		node = SCM_CDR(node);
 		}
 	scm_remember_upto_here_1(list);
+	scm_remember_upto_here_2(glue, items);
+	scm_remember_upto_here_2(node, item);
 	return scm_string_join(scm_reverse(list), glue, infix);
 	}
 

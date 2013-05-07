@@ -112,8 +112,7 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 	SCM whole;
 	whole = scm_string_concatenate(scm_reverse(parts));
 	scm_remember_upto_here_2(parts, slot_mark);
-	scm_remember_upto_here_1(slot_end);
-	scm_remember_upto_here_1(whole);
+	scm_remember_upto_here_2(slot_end, whole);
 	return whole;
 	}
 

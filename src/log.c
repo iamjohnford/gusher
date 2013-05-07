@@ -63,6 +63,7 @@ static SCM log_to(SCM path) {
 		free(logpath);
 		logpath = NULL;
 		}
+	scm_remember_upto_here_1(path);
 	return SCM_BOOL_T;
 	}
 

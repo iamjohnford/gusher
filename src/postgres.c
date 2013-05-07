@@ -166,7 +166,8 @@ static SCM build_row(struct pg_res *pgr) {
 		tnode = SCM_CDR(tnode);
 		}
 	scm_remember_upto_here_2(row, value);
-	scm_remember_upto_here_1(pair);
+	scm_remember_upto_here_2(pair, fnode);
+	scm_remember_upto_here_1(tnode);
 	return row;
 	}
 
@@ -192,6 +193,7 @@ static SCM pg_each_row(SCM res, SCM func) {
 		}
 	PQclear(pgr->res);
 	pgr->res = NULL;
+	scm_remember_upto_here_2(res, func);
 	return SCM_UNSPECIFIED;
 	}
 
@@ -212,6 +214,7 @@ static SCM pg_map_rows(SCM res, SCM rest) {
 	pgr->res = NULL;
 	bag = scm_reverse(bag);
 	scm_remember_upto_here_2(bag, row);
+	scm_remember_upto_here_2(res, rest);
 	return bag;
 	}
 
@@ -226,6 +229,7 @@ static SCM pg_one_row(SCM conn, SCM query) {
 	PQclear(pgr->res);
 	pgr->res = NULL;
 	scm_remember_upto_here_2(res, row);
+	scm_remember_upto_here_2(conn, query);
 	return row;
 	}
 
@@ -233,6 +237,7 @@ static SCM pg_done(SCM res) {
 	struct pg_res *pgr;
 	scm_assert_smob_type(pg_res_tag, res);
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
+	scm_remember_upto_here_1(res);
 	return (pgr->res == NULL ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
@@ -248,7 +253,7 @@ static SCM pg_next_row(SCM res) {
 		}
 	row = build_row(pgr);
 	pgr->cursor++;
-	scm_remember_upto_here_1(row);
+	scm_remember_upto_here_2(row, res);
 	return row;
 	}
 
@@ -258,6 +263,7 @@ static SCM pg_clear(SCM res) {
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
 	if (pgr->res != NULL) PQclear(pgr->res);
 	pgr->res = NULL;
+	scm_remember_upto_here_1(res);
 	return SCM_UNSPECIFIED;
 	}
 
@@ -265,6 +271,7 @@ static SCM pg_fields(SCM res) {
 	struct pg_res *pgr;
 	scm_assert_smob_type(pg_res_tag, res);
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
+	scm_remember_upto_here_1(res);
 	return pgr->fields;
 	}
 
@@ -274,7 +281,7 @@ static SCM pg_tuples(SCM res) {
 	scm_assert_smob_type(pg_res_tag, res);
 	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
 	out = scm_from_signed_integer(pgr->tuples);
-	scm_remember_upto_here_1(res);
+	scm_remember_upto_here_2(res, out);
 	return out;
 	}
 
@@ -335,11 +342,16 @@ static SCM pg_format_sql(SCM conn, SCM obj) {
 	else if (scm_is_null(obj)) out = c2s("NULL");
 	else out = c2s("NULL");
 	scm_remember_upto_here_1(out);
+	scm_remember_upto_here_2(conn, obj);
 	return out;
 	}
 
 static SCM pg_cell(SCM row, SCM col_key) {
-	return scm_assq_ref(row, col_key);
+	SCM cell;
+	cell = scm_assq_ref(row, col_key);
+	scm_remember_upto_here_1(cell);
+	scm_remember_upto_here_2(row, col_key);
+	return cell;
 	}
 
 void init_postgres(void) {

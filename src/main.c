@@ -194,6 +194,7 @@ static SCM default_not_found(SCM request) {
 	resp = scm_cons(headers, resp);
 	resp = scm_cons(scm_from_locale_string("404 Not Found"), resp);
 	scm_remember_upto_here_2(resp, headers);
+	scm_remember_upto_here_1(request);
 	return resp;
 	}
 
@@ -216,7 +217,7 @@ static SCM find_handler(SCM request) {
 			}
 		}
 	free(spath);
-	scm_remember_upto_here_1(pair);
+	scm_remember_upto_here_2(pair, request);
 	return SCM_BOOL_F;
 	}
 
@@ -244,6 +245,7 @@ static SCM simple_http_response(SCM mime_type, SCM content) {
 	resp = scm_cons(headers, resp);
 	resp = scm_cons(scm_from_locale_string("200 OK"), resp);
 	scm_remember_upto_here_2(headers, resp);
+	scm_remember_upto_here_2(mime_type, content);
 	return resp;
 	}
 
@@ -261,6 +263,7 @@ static SCM json_http_response(SCM enc_content) {
 	resp = scm_cons(headers, resp);
 	resp = scm_cons(scm_from_locale_string("200 OK"), resp);
 	scm_remember_upto_here_2(headers, resp);
+	scm_remember_upto_here_1(enc_content);
 	return resp;
 	}
 
@@ -281,6 +284,7 @@ static char *session_cookie(SCM request) {
 		key[len] = '\0';
 		}
 	free(buf);
+	scm_remember_upto_here_1(request);
 	return key;
 	}
 
@@ -411,6 +415,7 @@ static SCM dump_request(SCM request) {
 	reply = scm_cons(headers, reply);
 	reply = scm_cons(scm_from_locale_string("404 Not Found"), reply);
 	scm_remember_upto_here_2(reply, headers);
+	scm_remember_upto_here_1(request);
 	return reply;
 	}
 
@@ -443,6 +448,7 @@ static void send_headers(int sock, SCM headers) {
 		}
 	send_all(sock, "\r\n");
 	scm_remember_upto_here_2(node, pair);
+	scm_remember_upto_here_1(headers);
 	return;
 	}
 
@@ -479,8 +485,8 @@ static SCM run_responder(SCM request) {
 	else reply = scm_call_1(SCM_CAR(handler), request);
 	reply = scm_cons(cookie_header, reply);
 	scm_remember_upto_here_1(cookie_header);
-	scm_remember_upto_here_1(reply);
-	scm_remember_upto_here_1(handler);
+	scm_remember_upto_here_2(reply, handler);
+	scm_remember_upto_here_1(request);
 	return reply;
 	}
 
@@ -545,10 +551,8 @@ static void process_request(RFRAME *frame) {
 	send_all(sock, body);
 	free(body);
 	close(sock);
-	scm_remember_upto_here_1(request);
-	scm_remember_upto_here_1(reply);
-	scm_remember_upto_here_1(headers);
-	scm_remember_upto_here_1(cookie_header);
+	scm_remember_upto_here_2(request, reply);
+	scm_remember_upto_here_2(headers, cookie_header);
 	return;
 	}
 
@@ -576,6 +580,7 @@ static SCM catch_req(void *data, SCM key, SCM params) {
 	send_all(frame->sock, err_msg);
 	close(frame->sock);
 	scm_remember_upto_here_1(format);
+	scm_remember_upto_here_2(key, params);
 	return SCM_BOOL_T;
 	}
 
@@ -628,6 +633,7 @@ static SCM query_value(SCM request, SCM key) {
 		return SCM_BOOL_F;
 	value = scm_assq_ref(query, key);
 	scm_remember_upto_here_2(query, value);
+	scm_remember_upto_here_2(request, key);
 	return value;
 	}
 
