@@ -31,10 +31,13 @@
 
 #define SIGBUFSIZE 1024
 #define MAX_SNOOZE 20.0
+#define EVENT_BLOCK (sizeof(struct inotify_event)+NAME_MAX+1)
+#define EVENT_BLOB (EVENT_BLOCK*16)
 
 int inotify_fd = -1;
 extern char gusher_root[];
 static char signals_root[PATH_MAX];
+static char events_buf[EVENT_BLOB];
 static SCM watch_nodes;
 static int pulsing = 0;
 
@@ -164,26 +167,6 @@ static void mask_const(const char *name, uint32_t val) {
 	return;
 	}
 
-static struct inotify_event *read_event(int fd) {
-	int want, got;
-	char *buf, *pt;
-	struct inotify_event *ev;
-	char hdr[256];
-	if (read(fd, hdr, sizeof(hdr)) < 1) return NULL;
-	ev = (struct inotify_event *)hdr;
-	want = ev->len;
-	buf = (char *)malloc(sizeof(struct inotify_event) + want);
-	memcpy(buf, hdr, sizeof(struct inotify_event));
-	pt = ((struct inotify_event *)buf)->name;
-	while (want > 0) {
-		got = read(fd, pt, want);
-		if (got < 1) break;
-		want -= got;
-		pt += got;
-		}
-	return (struct inotify_event *)buf;
-	}
-
 static SCM get_signal_msg_intern(const char *path) {
 	int fd, n;
 	SCM list, msg;
@@ -215,29 +198,34 @@ static SCM get_signal_msg(SCM signal) {
 	return get_signal_msg_intern(path);
 	}
 
-void process_inotify_event() {
+void process_inotify_events() {
+	int n, i;
 	struct inotify_event *event;
 	SCM node, tuple, msg;
-	int wd;
 	char *sigfile;
-	if ((event = read_event(inotify_fd)) == NULL) return;
-	wd = event->wd;
-	free(event);
-	sigfile = NULL;
-	msg = scm_from_locale_string("");
-	node = watch_nodes;
-	while (node != SCM_EOL) {
-		tuple = SCM_CAR(node);
-		if (wd == scm_to_int(SCM_CAR(tuple))) {
-			if (sigfile == NULL) {
-				sigfile = scm_to_locale_string(SCM_CADDR(tuple));
-				msg = get_signal_msg_intern(sigfile);
+	n = read(inotify_fd, events_buf, EVENT_BLOB);
+	if (n < 1) return;
+	if (n == EVENT_BLOB) log_msg("inotify: possible dropped events");
+	i = 0;
+	while (i < n) {
+		event = (struct inotify_event *)(&events_buf[i]);
+		sigfile = NULL;
+		msg = scm_from_locale_string("");
+		node = watch_nodes;
+		while (node != SCM_EOL) {
+			tuple = SCM_CAR(node);
+			if (event->wd == scm_to_int(SCM_CAR(tuple))) {
+				if (sigfile == NULL) {
+					sigfile = scm_to_locale_string(SCM_CADDR(tuple));
+					msg = get_signal_msg_intern(sigfile);
+					}
+				scm_call_1(SCM_CADR(tuple), msg);
 				}
-			scm_call_1(SCM_CADR(tuple), msg);
+			node = SCM_CDR(node);
 			}
-		node = SCM_CDR(node);
+		free(sigfile);
+		i += sizeof(struct inotify_event) + event->len;
 		}
-	free(sigfile);
 	return;
 	}
 

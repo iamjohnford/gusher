@@ -935,7 +935,7 @@ int main(int argc, char **argv) {
 		if (poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
 		//if (running == 0) break; // why?
 		if (polls[0].revents & POLLIN) process_http(sock);
-		if (polls[1].revents & POLLIN) process_inotify_event();
+		if (polls[1].revents & POLLIN) process_inotify_events();
 		if (polls[2].revents & POLLIN) process_line(fdin);
 		}
 	log_msg("bye!\n");
