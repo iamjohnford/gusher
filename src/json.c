@@ -108,7 +108,7 @@ SCM json_encode(SCM obj) {
 	}
 
 static SCM parse(json_t *obj) {
-	size_t n, i;
+	size_t i;
 	const char *key;
 	json_t *val;
 	SCM list;
@@ -124,8 +124,7 @@ static SCM parse(json_t *obj) {
 	if (json_is_null(obj)) return SCM_EOL;
 	if (json_is_array(obj)) {
 		list = SCM_EOL;
-		n = json_array_size(obj);
-		for (i = 0; i < n; i++) {
+		for (i = json_array_size(obj) - 1; i >= 0; i--) {
 			list = scm_cons(parse(json_array_get(obj, i)), list);
 			}
 		return list;
