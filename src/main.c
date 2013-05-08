@@ -51,7 +51,7 @@
 #define DEFAULT_PORT 8080
 #define BOOT_FILE "boot.scm"
 #define COOKIE_KEY "GUSHERID"
-#define MAX_THREADS 32
+#define DEFAULT_MAX_THREADS 32
 #define POLL_TIMEOUT 3000
 #define POLICE_INTVL 6
 #define DEFAULT_GUSHER_ROOT "/var/lib/gusher"
@@ -87,6 +87,7 @@ static int nthreads = 0;
 static int busy_threads = 0;
 static int threading;
 static int tcount = 0;
+static int max_threads = DEFAULT_MAX_THREADS;
 static RFRAME *req_pool = NULL;
 static RFRAME *req_queue = NULL;
 static RFRAME *req_tail = NULL;
@@ -651,7 +652,7 @@ static SCM query_value_number(SCM request, SCM key) {
 
 static void add_thread() {
 	SCM thread;
-	if (nthreads >= MAX_THREADS) return;
+	if (nthreads >= max_threads) return;
 	thread = scm_spawn_thread(dispatcher, NULL, NULL, NULL);
 	if (threads != SCM_EOL) scm_gc_unprotect_object(threads);
 	threads = scm_cons(thread, threads);
@@ -880,10 +881,14 @@ int main(int argc, char **argv) {
 	threading = 1;
 	background = 0;
 	gusher_root[0] = '\0';
-	while ((opt = getopt(argc, argv, "sdp:")) != -1) {
+	while ((opt = getopt(argc, argv, "sdp:t:")) != -1) {
 		switch (opt) {
 			case 'p':
 				http_port = atoi(optarg);
+				break;
+			case 't':
+				max_threads = atoi(optarg);
+				if (max_threads < 1) max_threads = 1;
 				break;
 			case 'd': // daemon
 				background = 1;
