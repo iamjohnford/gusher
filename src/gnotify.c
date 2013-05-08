@@ -39,6 +39,7 @@ extern char gusher_root[];
 static char signals_root[PATH_MAX];
 static char events_buf[EVENT_BLOB];
 static SCM watch_nodes;
+static SCM mutex;
 static int pulsing = 0;
 
 SCM add_watch(SCM path, SCM mask, SCM handler) {
@@ -76,7 +77,9 @@ SCM add_watch(SCM path, SCM mask, SCM handler) {
 
 static void write_signal(const char *path, const char *msg) {
 	int fd;
+	scm_lock_mutex(mutex);
 	if ((fd = open(path, O_CREAT | O_WRONLY | O_TRUNC, 0664)) < 0) {
+		scm_unlock_mutex(mutex);
 		log_msg("signals: can't write %s [%s]\n", path, strerror(errno));
 		return;
 		}
@@ -85,6 +88,7 @@ static void write_signal(const char *path, const char *msg) {
 	if (msg != NULL) write(fd, (const void *)msg, strlen(msg));
 	flock(fd, LOCK_UN);
 	close(fd);
+	scm_unlock_mutex(mutex);
 	return;
 	}
 
@@ -174,7 +178,9 @@ static SCM get_signal_msg_intern(const char *path) {
 	int fd, n;
 	SCM list, msg;
 	char *buf;
+	scm_lock_mutex(mutex);
 	if ((fd = open(path, O_RDONLY)) < 0) {
+		scm_unlock_mutex(mutex);
 		buf = (char *)malloc(SIGBUFSIZE);
 		snprintf(buf, SIGBUFSIZE - 1, "unable to read %s", path);
 		buf[SIGBUFSIZE - 1] = '\0';
@@ -190,6 +196,7 @@ static SCM get_signal_msg_intern(const char *path) {
 	free(buf);
 	flock(fd, LOCK_UN);
 	close(fd);
+	scm_unlock_mutex(mutex);
 	msg = scm_string_concatenate(scm_reverse(list));
 	scm_remember_upto_here_2(list, msg);
 	return msg;
@@ -278,6 +285,7 @@ static SCM stop_pulse() {
 
 void init_inotify() {
 	inotify_fd = inotify_init();
+	scm_permanent_object(mutex = scm_make_mutex());
 	watch_nodes = SCM_EOL;
 	snprintf(signals_root, sizeof(signals_root) - 1,
 				"%s/signals", gusher_root);
