@@ -456,16 +456,17 @@ void init_cache(void) {
 	scm_set_smob_free(kvdb_node_tag, free_kvdb);
 	sessions_db = scm_from_locale_string("sessions");
 	scm_gc_protect_object(sessions_db);
-	file_sym = scm_from_utf8_symbol("file");
-	data_sym = scm_from_utf8_symbol("data");
+	scm_permanent_object(file_sym = scm_from_utf8_symbol("file"));
+	scm_permanent_object(data_sym = scm_from_utf8_symbol("data"));
 	scm_c_define_gsubr("make-doc", 2, 0, 0, make_doc);
 	scm_c_define_gsubr("touch-doc", 1, 0, 1, touch_node);
 	scm_c_define_gsubr("fetch-doc", 1, 0, 1, fetch_node);
 	scm_c_define_gsubr("touched-doc?", 1, 0, 0, touched_node);
 	scm_c_define_gsubr("kv-open", 2, 0, 0, kv_open);
-	scm_c_define("kv-reader", kv_reader = scm_from_int(KCOREADER));
-	scm_c_define("kv-writer",
-					kv_writer = scm_from_int(KCOWRITER | KCOCREATE));
+	scm_permanent_object(kv_reader = scm_from_int(KCOREADER));
+	scm_c_define("kv-reader", kv_reader);
+	scm_permanent_object(kv_writer = scm_from_int(KCOWRITER | KCOCREATE));
+	scm_c_define("kv-writer", kv_writer);
 	scm_c_define_gsubr("kv-close", 1, 0, 0, kv_close);
 	scm_c_define_gsubr("kv-set", 3, 0, 0, kv_set);
 	scm_c_define_gsubr("kv-get", 2, 0, 0, kv_get);
