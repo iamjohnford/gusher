@@ -14,16 +14,20 @@ Features include:
 database access
 
 - [KyotoCabinet](http://fallabs.com/kyotocabinet/), embedded
-key-value database
+key-value database for storing session cookies and for general
+high-speed caching
 
 - http client implemented with [libcurl](http://curl.haxx.se/)
 
-- [Jansson](http://www.digip.org/jansson/)-based JSON encoder/decoder, to facilitate AJAX transactions and to receive JSON-encoded documents
+- JSON encoder/decoder implemented with
+[jansson](http://www.digip.org/jansson/), to facilitate AJAX
+transactions and to receive JSON-encoded documents
 
-- XML parsing with [libxml2](http://xmlsoft.org/)
+- XML parsing with [libxml2](http://xmlsoft.org/), for receiving and
+generating RSS feeds and the like
 
-- "make"-like content caching facility, where cache is automatically
-refreshed as needed, according to a cached item's dependencies
+- [make](http://linux.die.net/man/1/make)-like content caching facility,
+for selectively refreshing cached items as their dependencies update
 
 - fast, simple templating facility, mainly for composing HTML
 
