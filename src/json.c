@@ -160,9 +160,9 @@ SCM json_decode(SCM string) {
 	buf = scm_to_utf8_string(string);
 	root = json_loads(buf, 0, &err);
 	if (root == NULL) {
-		log_msg("json decode: %s %d:%d:%d '%s'\n",
-				err.source, err.line, err.column, err.position,
-				err.text);
+		/*log_msg("json decode: \"%s\" %s %d:%d:%d \"%s\"\n",
+				buf, err.source, err.line, err.column, err.position,
+				err.text);*/
 		obj = SCM_BOOL_F;
 		}
 	else obj = parse(root);
