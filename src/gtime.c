@@ -137,6 +137,7 @@ static SCM time_diff(SCM time1, SCM time2) {
 	gtime1 = (struct g_time *)SCM_SMOB_DATA(time1);
 	scm_assert_smob_type(time_tag, time2);
 	gtime2 = (struct g_time *)SCM_SMOB_DATA(time2);
+	scm_remember_upto_here_2(time1, time2);
 	return scm_from_double(epoch_sec(gtime1) - epoch_sec(gtime2));
 	}
 
@@ -163,6 +164,7 @@ static SCM time_add(SCM time, SCM sec) {
 	gtime->usec = usec;
 	gtime->epoch = ntime;
 	SCM_NEWSMOB(smob, time_tag, gtime);
+	scm_remember_upto_here_2(time, sec);
 	return smob;
 	}
 
@@ -170,6 +172,7 @@ static SCM time_year(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	scm_remember_upto_here_1(time);
 	return scm_from_signed_integer(gtime->time.tm_year + 1900);
 	}
 
@@ -177,6 +180,7 @@ static SCM time_month(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	scm_remember_upto_here_1(time);
 	return scm_from_signed_integer(gtime->time.tm_mon + 1);
 	}
 
@@ -184,6 +188,7 @@ static SCM time_mday(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	scm_remember_upto_here_1(time);
 	return scm_from_signed_integer(gtime->time.tm_mday);
 	}
 
@@ -191,6 +196,7 @@ static SCM time_wday(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	scm_remember_upto_here_1(time);
 	return scm_from_signed_integer(gtime->time.tm_wday);
 	}
 
@@ -198,6 +204,7 @@ static SCM time_hour(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	scm_remember_upto_here_1(time);
 	return scm_from_signed_integer(gtime->time.tm_hour);
 	}
 
@@ -205,6 +212,7 @@ static SCM time_min(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	scm_remember_upto_here_1(time);
 	return scm_from_signed_integer(gtime->time.tm_min);
 	}
 
@@ -212,6 +220,7 @@ static SCM time_sec(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	scm_remember_upto_here_1(time);
 	return scm_from_double(gtime->time.tm_sec
 			+ gtime->usec / 1000000.0);
 	}
@@ -220,6 +229,7 @@ static SCM time_epoch(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	scm_remember_upto_here_1(time);
 	return scm_from_int(gtime->epoch);
 	}
 
@@ -227,6 +237,7 @@ static SCM time_offset(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	scm_remember_upto_here_1(time);
 	return scm_from_signed_integer(gtime->time.tm_gmtoff);
 	}
 
@@ -234,6 +245,7 @@ static SCM time_zone(SCM time) {
 	struct g_time *gtime;
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
+	scm_remember_upto_here_1(time);
 	return scm_from_locale_string(gtime->time.tm_zone);
 	}
 
@@ -243,6 +255,7 @@ static SCM snooze(SCM sec) {
 	naptime = scm_to_double(sec);
 	ts.tv_sec = (time_t)(dsec = floor(naptime));
 	ts.tv_nsec = (naptime - dsec) * 1000000000;
+	scm_remember_upto_here_1(sec);
 	return (nanosleep(&ts, NULL) == 0 ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
@@ -253,6 +266,7 @@ static SCM time_decode(SCM stamp) {
 	struct g_time *time;
 	SCM smob;
 	str = scm_to_locale_string(stamp);
+	scm_remember_upto_here_1(stamp);
 	if (regexec(&time_pat1, str, 8, match, 0) == 0) {
 		char *pt, *next;
 		struct tm time;
