@@ -32,6 +32,7 @@ static SCM to_s(SCM obj) {
 	if (scm_is_null(obj)) return scm_from_locale_string("");
 	if (obj == SCM_BOOL_T) return scm_from_locale_string("true");
 	if (obj == SCM_BOOL_F) return scm_from_locale_string("false");
+	scm_remember_upto_here_1(obj);
 	return obj;
 	}
 
@@ -47,6 +48,7 @@ static SCM to_i(SCM obj) {
 	else if (scm_is_real(obj)) i = (int)scm_to_double(obj);
 	else if (scm_is_integer(obj)) return obj;
 	else if (obj == SCM_BOOL_T) i = 1;
+	scm_remember_upto_here_1(obj);
 	return scm_from_int(i);
 	}
 
