@@ -87,16 +87,22 @@ static json_t *json_build(SCM obj) {
 	return jobj;
 	}
 
+static void discard(json_t *obj) {
+	int n;
+	if (obj == NULL) return;
+	if ((n = obj->refcount) > 0)
+		while (n--) json_decref(obj);
+	return;
+	}
+
 SCM json_encode(SCM obj) {
 	char *buf;
-	int n;
 	SCM out;
 	json_t *root;
 	root = json_build(obj);
 	scm_remember_upto_here_1(obj);
 	buf = json_dumps(root, JSON_COMPACT);
-	if ((n = root->refcount) > 0)
-		while (n--) json_decref(root);
+	discard(root);
 	if (buf == NULL) {
 		log_msg("JSON encode failed\n");
 		return SCM_BOOL_F;
@@ -151,11 +157,14 @@ SCM json_decode(SCM string) {
 	json_error_t err;
 	buf = scm_to_utf8_string(string);
 	root = json_loads(buf, 0, &err);
-	if (root == NULL) obj = SCM_BOOL_F;
-	else {
-		obj = parse(root);
-		json_decref(root);
+	if (root == NULL) {
+		log_msg("json decode: %s %d:%d:%d '%s'\n",
+				err.source, err.line, err.column, err.position,
+				err.text);
+		obj = SCM_BOOL_F;
 		}
+	else obj = parse(root);
+	discard(root);
 	free(buf);
 	scm_remember_upto_here_2(string, obj);
 	return obj;
