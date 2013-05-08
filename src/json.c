@@ -26,10 +26,12 @@
 
 static char *make_key(SCM obj) {
 	SCM string;
+	char *key;
 	if (scm_is_string(obj)) string = obj;
 	else string = scm_symbol_to_string(obj);
+	key = scm_to_utf8_string(string);
 	scm_remember_upto_here_2(obj, string);
-	return scm_to_utf8_string(string);
+	return key;
 	}
 
 static json_t *json_build(SCM obj) {
