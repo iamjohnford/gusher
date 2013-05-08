@@ -791,19 +791,12 @@ static void process_line(int fd) {
 	}
 
 static void enqueue_frame(RFRAME *frame) {
-	RFRAME *node;
-	int count, need_sig;
+	int need_sig;
 	scm_lock_mutex(qmutex);
 	frame->next = NULL;
 	if ((need_sig = (req_queue == NULL))) req_queue = frame;
 	else req_tail->next = frame;
 	req_tail = frame;
-	node = req_queue;
-	count = 0;
-	while (node != NULL) {
-		count += 1;
-		node = node->next;
-		}
 	if (need_sig) {
 		SCM node;
 		node = qcondvars;
