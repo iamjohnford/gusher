@@ -146,14 +146,19 @@ static SCM parse(json_t *obj) {
 
 SCM json_decode(SCM string) {
 	char *buf;
+	SCM obj;
 	json_t *root;
 	json_error_t err;
 	buf = scm_to_utf8_string(string);
-	scm_remember_upto_here_1(string);
 	root = json_loads(buf, 0, &err);
+	if (root == NULL) obj = SCM_BOOL_F;
+	else {
+		obj = parse(root);
+		json_decref(root);
+		}
 	free(buf);
-	if (root == NULL) return SCM_BOOL_F;
-	return parse(root);
+	scm_remember_upto_here_2(string, obj);
+	return obj;
 	}
 
 void init_json(void) {
