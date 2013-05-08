@@ -51,7 +51,7 @@ static SCM to_i(SCM obj) {
 	}
 
 static SCM string_cat(SCM glue, SCM items) {
-	SCM list, node, item;
+	SCM list, node, item, cat;
 	list = SCM_EOL;
 	node = items;
 	item = SCM_EOL;
@@ -67,10 +67,11 @@ static SCM string_cat(SCM glue, SCM items) {
 			list = scm_cons(scm_apply_1(string_cat_proc, glue, item), list);
 		node = SCM_CDR(node);
 		}
-	scm_remember_upto_here_1(list);
+	cat = scm_string_join(scm_reverse(list), glue, infix);
+	scm_remember_upto_here_2(list, cat);
 	scm_remember_upto_here_2(glue, items);
 	scm_remember_upto_here_2(node, item);
-	return scm_string_join(scm_reverse(list), glue, infix);
+	return cat;
 	}
 
 void init_butter() {
