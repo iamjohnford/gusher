@@ -75,6 +75,7 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 			parts = scm_cons(c2s(pin), parts);
 			break;
 			}
+		while (sense[2] && !isupper(sense[2])) sense++;
 		hold = *sense;
 		*sense = '\0';
 		parts = scm_cons(c2s(pin), parts);
