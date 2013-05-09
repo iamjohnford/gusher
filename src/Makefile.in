@@ -242,6 +242,16 @@ top_srcdir = @top_srcdir@
 gusher_SOURCES = main.c postgres.c gtime.c cache.c json.c template.c gnotify.c log.c http.c butter.c
 lib1dir = /var/lib/gusher
 lib1_SCRIPTS = boot.scm
+
+#install-data-local:
+#	groupadd -f gusher
+#	mkdir -p $(lib1dir)/kc
+#	mkdir -p $(lib1dir)/signals
+#	chown -R root:gusher $(lib1dir)
+#	chmod -R g+sw $(lib1dir)
+#	mkdir -p /var/log/gusher
+#	chown -R root:gusher /var/log/gusher
+#	chmod -R g+sw /var/log/gusher
 AM_CFLAGS = -Wall -I/usr/local/include/guile/2.0 -I/usr/include/libxml2 -DLOCALLIB=\"$(libdir)\"
 all: all-am
 
@@ -530,7 +540,7 @@ info: info-am
 
 info-am:
 
-install-data-am: install-data-local install-lib1SCRIPTS
+install-data-am: install-lib1SCRIPTS
 
 install-dvi: install-dvi-am
 
@@ -584,25 +594,15 @@ uninstall-am: uninstall-binPROGRAMS uninstall-lib1SCRIPTS
 	distclean distclean-compile distclean-generic distclean-tags \
 	distdir dvi dvi-am html html-am info info-am install \
 	install-am install-binPROGRAMS install-data install-data-am \
-	install-data-local install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-info \
-	install-info-am install-lib1SCRIPTS install-man install-pdf \
-	install-pdf-am install-ps install-ps-am install-strip \
-	installcheck installcheck-am installdirs maintainer-clean \
+	install-dvi install-dvi-am install-exec install-exec-am \
+	install-html install-html-am install-info install-info-am \
+	install-lib1SCRIPTS install-man install-pdf install-pdf-am \
+	install-ps install-ps-am install-strip installcheck \
+	installcheck-am installdirs maintainer-clean \
 	maintainer-clean-generic mostlyclean mostlyclean-compile \
 	mostlyclean-generic pdf pdf-am ps ps-am tags tags-am uninstall \
 	uninstall-am uninstall-binPROGRAMS uninstall-lib1SCRIPTS
 
-
-install-data-local:
-	groupadd -f gusher
-	mkdir -p $(lib1dir)/kc
-	mkdir -p $(lib1dir)/signals
-	chown -R root:gusher $(lib1dir)
-	chmod -R g+sw $(lib1dir)
-	mkdir -p /var/log/gusher
-	chown -R root:gusher /var/log/gusher
-	chmod -R g+sw /var/log/gusher
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
