@@ -63,6 +63,8 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 		if (scm_is_number(payload))
 			payload = scm_number_to_string(payload,
 						scm_from_int(10));
+		else if (scm_is_null(payload))
+			payload = scm_from_locale_string("");
 		table[i].payload = scm_to_locale_string(payload);
 		i++;
 		}
