@@ -116,7 +116,7 @@ SCM json_encode(SCM obj) {
 	}
 
 static SCM parse(json_t *obj) {
-	size_t i;
+	int i;
 	const char *key;
 	json_t *val;
 	SCM list;
