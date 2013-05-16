@@ -218,9 +218,9 @@ static SCM process_body(SCM headers, SCM body) {
 	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
 	stype = scm_to_utf8_string(ctype);
 	scm_remember_upto_here_1(ctype);
-	if (match(stype, "text/json") ||
-			match(stype, "application/json") ||
-			match(stype, "application/javascript"))
+	if (matchn(stype, "text/json") ||
+			matchn(stype, "application/json") ||
+			matchn(stype, "application/javascript"))
 		body = json_decode(body);
 	else if (matchn(stype, "application/xml") ||
 			matchn(stype, "application/atom+xml") ||
