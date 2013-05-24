@@ -52,6 +52,22 @@ static SCM to_i(SCM obj) {
 	return scm_from_int(i);
 	}
 
+static SCM to_f(SCM obj) {
+	double x;
+	char *buf;
+	x = 0;
+	if (scm_is_string(obj)) {
+		buf = scm_to_locale_string(obj);
+		x = atof(buf);
+		free(buf);
+		}
+	else if (scm_is_real(obj)) x = scm_to_double(obj);
+	else if (scm_is_integer(obj)) x = (double)scm_to_int(obj);
+	else if (obj == SCM_BOOL_T) x = 1.0;
+	scm_remember_upto_here_1(obj);
+	return scm_from_double(x);
+	}
+
 static SCM string_cat(SCM glue, SCM items) {
 	SCM list, node, item, cat;
 	list = SCM_EOL;
@@ -83,6 +99,7 @@ void init_butter() {
 	scm_gc_protect_object(infix);
 	scm_c_define_gsubr("to-s", 1, 0, 0, to_s);
 	scm_c_define_gsubr("to-i", 1, 0, 0, to_i);
+	scm_c_define_gsubr("to-f", 1, 0, 0, to_f);
 	scm_c_define_gsubr("string-cat", 1, 0, 1, string_cat);
 	string_cat_proc = scm_c_eval_string("string-cat");
 	scm_gc_protect_object(string_cat_proc);
