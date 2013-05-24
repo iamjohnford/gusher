@@ -564,6 +564,22 @@ static SCM body_req(void *data) {
 
 static const char *err_msg = "HTTP/1.1 500 Internal Server Error\r\nContent-type: text/plain\r\n\r\nwuh-oh! gusher application error\r\n";
 
+static SCM captured_stack = SCM_BOOL_F;
+
+static void backtrace(SCM stack) {
+	SCM port, string;
+	char *cstring;
+	port = scm_open_output_string();
+	scm_display_backtrace(stack, port, SCM_BOOL_F, SCM_BOOL_F);
+	string = scm_get_output_string(port);
+	cstring = scm_to_locale_string(string);
+	log_msg("TRACE: %s\n", cstring);
+	scm_close_output_port(port);
+	free(cstring);
+	scm_remember_upto_here_2(port, string);
+	return;
+	}
+
 static SCM catch_req(void *data, SCM key, SCM params) {
 	RFRAME *frame;
 	char *buf;
@@ -577,12 +593,18 @@ static SCM catch_req(void *data, SCM key, SCM params) {
 	buf = scm_to_locale_string(scm_call_3(format, SCM_BOOL_F,
 		scm_from_locale_string("~s"), params));
 	log_msg("DETAIL: %s\n", buf);
+	backtrace(captured_stack);
 	free(buf);
 	send_all(frame->sock, err_msg);
 	close(frame->sock);
 	scm_remember_upto_here_1(format);
 	scm_remember_upto_here_2(key, params);
 	return SCM_BOOL_T;
+	}
+
+static SCM grab_stack(void *data, SCM key, SCM parameters) {
+	*((SCM *)data) = scm_make_stack(SCM_BOOL_T, SCM_EOL);
+	return SCM_UNSPECIFIED;
 	}
 
 static SCM dispatcher(void *data) {
@@ -620,7 +642,7 @@ static SCM dispatcher(void *data) {
 		scm_c_catch(SCM_BOOL_T,
 			body_req, (void *)frame,
 			catch_req, (void *)frame,
-			NULL, NULL);
+			grab_stack, &captured_stack);
 		//scm_lock_mutex(qmutex);
 		busy_threads--;
 		//scm_unlock_mutex(qmutex);
@@ -750,6 +772,7 @@ static SCM catch_proc(void *data, SCM key, SCM params) {
 	scm_call_0(scm_c_eval_string("newline"));
 	scm_call_1(scm_c_eval_string("write"), params);
 	scm_call_0(scm_c_eval_string("newline"));
+	backtrace(captured_stack);
 	return SCM_BOOL_T;
 	}
 
@@ -762,8 +785,8 @@ static void line_handler(char *line) {
 	add_history(line);
 	scm_c_catch(SCM_BOOL_T,
 			body_proc, (void *)line,
-			catch_proc, NULL,
-			NULL, NULL);
+			catch_proc, "line handler",
+			grab_stack, &captured_stack);
 	free(line);
 	return;
 	}
@@ -784,8 +807,8 @@ static void process_line(int fd) {
 	linebuf[n] = '\0';
 	scm_c_catch(SCM_BOOL_T,
 			body_proc, linebuf,
-			catch_proc, NULL,
-			NULL, NULL);
+			catch_proc, "process line",
+			grab_stack, &captured_stack);
 	return;
 	}
 
