@@ -37,5 +37,5 @@ SQL queries, anything that can be represented as a template
 - low-level, asynchronous intra- and inter-process signaling, for
 event-driven operation (linux kernel's "inotify")
 
--command line editing and history (libreadline) for interactive
+- command line editing and history (libreadline) for interactive
 Scheme coding
