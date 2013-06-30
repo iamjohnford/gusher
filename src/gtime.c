@@ -35,9 +35,10 @@ SCM local_time_intern(int year, int month, int day,
 			int hour, int minute, double second) {
 	SCM smob;
 	struct tm pad;
-	int usec;
+	int usec, bump;
 	time_t epoch;
 	struct g_time *time;
+	bump = 0;
 	pad.tm_year = year - 1900;
 	pad.tm_mon = month - 1;
 	pad.tm_mday = day;
@@ -47,13 +48,14 @@ SCM local_time_intern(int year, int month, int day,
 	pad.tm_isdst = -1;
 	usec = (int)((second - pad.tm_sec) * 1000000 + 0.5);
 	if (usec >= 1000000) {
-		pad.tm_sec += 1;
+		bump = 1;
 		usec -= 1000000;
 		}
 	if ((epoch = mktime(&pad)) < 0) return SCM_BOOL_F;
+	if (bump) epoch += 1;
 	time = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
 					"timestamp");
-	memcpy(&(time->time), &pad, sizeof(struct tm));
+	localtime_r(&epoch, &(time->time));
 	time->epoch = epoch;
 	time->usec = usec;
 	SCM_NEWSMOB(smob, time_tag, time);
