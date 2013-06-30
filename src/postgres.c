@@ -107,6 +107,7 @@ static SCM decode_timestamp(const char *string) {
 	const char *here;
 	int year, month, day, hour, min;
 	double sec;
+	SCM rtn;
 	here = string;
 	year = atoi(here);
 	here = index(here, '-') + 1;
@@ -122,7 +123,15 @@ static SCM decode_timestamp(const char *string) {
 		here = index(here, ':') + 1;
 		sec = atof(here);
 		}
-	return local_time_intern(year, month, day, hour, min, sec);
+	rtn = local_time_intern(year, month, day, hour, min, sec);
+	if (rtn == SCM_BOOL_F) log_msg("BAD TIME: '%s' %d-%d-%d %d:%d:%f\n",
+				string, year, month, day, hour, min, sec);
+	scm_remember_upto_here_1(rtn);
+	return rtn;
+	}
+
+static SCM decode_ts(SCM ts) {
+	return decode_timestamp(scm_to_locale_string(ts));
 	}
 
 static SCM pg_decode(char *string, int dtype) {
@@ -376,5 +385,6 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-end-stream?", 1, 0, 0, pg_done);
 	scm_c_define_gsubr("pg-format", 2, 0, 0, pg_format_sql);
 	scm_c_define_gsubr("pg-cell", 2, 0, 0, pg_cell);
+	scm_c_define_gsubr("decode-ts", 1, 0, 0, decode_ts);
 	}
 	
