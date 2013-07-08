@@ -50,10 +50,10 @@ static json_t *json_build(SCM obj) {
 		}
 	else if (scm_boolean_p(obj) == SCM_BOOL_T)
 		jobj = (obj == SCM_BOOL_T ? json_true() : json_false());
-	else if (scm_integer_p(obj) == SCM_BOOL_T)
-		jobj = json_integer(scm_to_int(scm_inexact_to_exact(obj)));
 	else if (scm_real_p(obj) == SCM_BOOL_T)
 		jobj = json_real(scm_to_double(obj));
+	else if (scm_integer_p(obj) == SCM_BOOL_T)
+		jobj = json_integer(scm_to_int(obj));
 	else if (scm_is_null(obj))
 		jobj = json_null();
 	else if ((scm_list_p(obj) == SCM_BOOL_T) &&
