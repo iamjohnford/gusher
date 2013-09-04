@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#define c2s(s) (scm_from_locale_string(s))
+#define c2s(s) (scm_from_utf8_string(s))
 #define SLOT_MARK "[["
 #define SLOT_END "]]"
 
@@ -42,7 +42,7 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 	struct template_slot *table;
 	char *pin, *sense, hold, *master;
 	int marklen, tabsize, i;
-	master = scm_to_locale_string(template);
+	master = scm_to_utf8_string(template);
 	scm_remember_upto_here_1(template);
 	pin = master;
 	parts = SCM_EOL;
@@ -57,7 +57,7 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 	payload = SCM_EOL;
 	for (node = slots; node != SCM_EOL; node = SCM_CDR(node)) {
 		pair = SCM_CAR(node);
-		table[i].token = upcase(scm_to_locale_string(
+		table[i].token = upcase(scm_to_utf8_string(
 				scm_symbol_to_string(SCM_CAR(pair))));
 		payload = SCM_CDR(pair);
 		if (scm_is_number(payload))
@@ -65,9 +65,9 @@ static SCM fill_template(SCM template, SCM partial, SCM slots) {
 						scm_from_int(10));
 		else if (scm_is_symbol(payload))
 			payload = scm_symbol_to_string(payload);
-		else if (scm_is_null(payload))
-			payload = scm_from_locale_string("");
-		table[i].payload = scm_to_locale_string(payload);
+		else if (!scm_is_string(payload))
+			payload = c2s("");
+		table[i].payload = scm_to_utf8_string(payload);
 		i++;
 		}
 	scm_remember_upto_here_2(node, pair);
