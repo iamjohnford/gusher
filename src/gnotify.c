@@ -137,7 +137,7 @@ SCM signal_touch(SCM signal, SCM rest) {
 	char sigpath[PATH_MAX];
 	get_sigpath(signal, sigpath, sizeof(sigpath));
 	assure_sigfile(sigpath);
-	if (rest != SCM_EOL) msg = scm_to_locale_string(SCM_CAR(rest));
+	if (rest != SCM_EOL) msg = scm_to_utf8_string(SCM_CAR(rest));
 	else msg = NULL;
 	write_signal(sigpath, msg);
 	free(msg);
@@ -176,29 +176,24 @@ static void mask_const(const char *name, uint32_t val) {
 
 static SCM get_signal_msg_intern(const char *path) {
 	int fd, n;
-	SCM list, msg;
+	SCM msg;
 	char *buf;
 	scm_lock_mutex(mutex);
 	if ((fd = open(path, O_RDONLY)) < 0) {
+		char mbuf[PATH_MAX + 128];
 		scm_unlock_mutex(mutex);
-		buf = (char *)malloc(SIGBUFSIZE);
-		snprintf(buf, SIGBUFSIZE - 1, "unable to read %s", path);
-		buf[SIGBUFSIZE - 1] = '\0';
-		return scm_take_locale_string(buf);
+		sprintf(mbuf, "unable to read %s", path);
+		return scm_from_utf8_string(mbuf);
 		}
 	flock(fd, LOCK_SH);
-	list = scm_cons(scm_from_locale_string(""), SCM_EOL);
-	buf = (char *)malloc(SIGBUFSIZE);
-	while ((n = read(fd, (void *)buf, SIGBUFSIZE)) > 0) {
-		list = scm_cons(scm_take_locale_stringn(buf, n), list);
-		buf = (char *)malloc(SIGBUFSIZE);
-		}
+	buf = (char *)malloc(65536);
+	n = read(fd, (void *)buf, 65536);
+	msg = scm_from_utf8_stringn(buf, n);
 	free(buf);
 	flock(fd, LOCK_UN);
 	close(fd);
 	scm_unlock_mutex(mutex);
-	msg = scm_string_concatenate(scm_reverse(list));
-	scm_remember_upto_here_2(list, msg);
+	scm_remember_upto_here_1(msg);
 	return msg;
 	}
 
