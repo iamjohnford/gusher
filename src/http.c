@@ -215,7 +215,7 @@ static SCM process_body(SCM headers, SCM body) {
 	char *stype;
 	SCM ctype;
 	ctype = scm_assq_ref(headers, symbol("content-type"));
-	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
+	if (ctype == SCM_BOOL_F) return body;
 	stype = scm_to_utf8_string(ctype);
 	scm_remember_upto_here_1(ctype);
 	if (matchn(stype, "text/json") ||
