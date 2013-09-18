@@ -34,12 +34,22 @@ static char *make_key(SCM obj) {
 	return key;
 	}
 
+static void ds(const char *src) {
+	int n, i;
+	printf("%s\n", src);
+	n = strlen(src);
+	for (i = 0; i < n; i++) printf("%02x ", (unsigned int)(src[i] & 0xff));
+	printf("\n");
+	return;
+	}
+
 static json_t *json_build(SCM obj) {
 	json_t *jobj;
 	SCM node;
 	char *buf;
 	if (scm_is_string(obj)) {
 		buf = scm_to_utf8_string(obj);
+//ds(buf);
 		jobj = json_string(buf);
 		free(buf);
 		}
@@ -104,6 +114,7 @@ SCM json_encode(SCM obj) {
 	root = json_build(obj);
 	scm_remember_upto_here_1(obj);
 	buf = json_dumps(root, JSON_COMPACT);
+//ds(buf);
 	discard(root);
 	if (buf == NULL) {
 		log_msg("JSON encode failed\n");
@@ -158,6 +169,7 @@ SCM json_decode(SCM string) {
 	json_t *root;
 	json_error_t err;
 	buf = scm_to_utf8_string(string);
+//ds(buf);
 	root = json_loads(buf, 0, &err);
 	if (root == NULL) {
 		/*log_msg("json decode: \"%s\" %s %d:%d:%d \"%s\"\n",
