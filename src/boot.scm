@@ -3,6 +3,10 @@
 	(http path
 		(lambda (req)
 			(simple-response "text/html; charset=UTF-8" (responder req)))))
+(define (http-xml path responder)
+	(http path
+		(lambda (req)
+			(simple-response "text/xml; charset=UTF-8" (responder req)))))
 (define (http-text path responder)
 	(http path
 		(lambda (req)
