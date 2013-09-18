@@ -307,6 +307,7 @@ void init_http() {
 	scm_c_define_gsubr("xml-node-name", 1, 0, 0, xml_node_name);
 	scm_c_define_gsubr("xml-node-attrs", 1, 0, 0, xml_node_attrs);
 	scm_c_define_gsubr("xml-node-content", 1, 0, 0, xml_node_content);
+	scm_c_define_gsubr("xml-parse", 1, 0, 0, parse_xml);
 	}
 
 void shutdown_http() {
