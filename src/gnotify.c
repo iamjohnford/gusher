@@ -129,6 +129,7 @@ SCM signal_subscribe(SCM signal, SCM handler) {
 	watch_nodes = newlist;
 	scm_remember_upto_here_2(tuple, newlist);
 	scm_remember_upto_here_2(signal, handler);
+	log_msg("subscribe %s\n", sigpath);
 	return SCM_BOOL_T;
 	}
 
@@ -140,6 +141,7 @@ SCM signal_touch(SCM signal, SCM rest) {
 	if (rest != SCM_EOL) msg = scm_to_utf8_string(SCM_CAR(rest));
 	else msg = NULL;
 	write_signal(sigpath, msg);
+	log_msg("touch %s with %s\n", sigpath, (msg == NULL ? "(null)" : msg));
 	free(msg);
 	return SCM_BOOL_T;
 	}
@@ -210,7 +212,7 @@ void process_inotify_events() {
 	char *sigfile;
 	n = read(inotify_fd, events_buf, EVENT_BLOB);
 	if (n < 1) return;
-	if (n == EVENT_BLOB) log_msg("inotify: possible dropped events");
+	if (n == EVENT_BLOB) log_msg("inotify: possible dropped events\n");
 	i = 0;
 	while (i < n) {
 		event = (struct inotify_event *)(&events_buf[i]);
@@ -225,6 +227,7 @@ void process_inotify_events() {
 					msg = get_signal_msg_intern(sigfile);
 					}
 				scm_call_1(SCM_CADR(tuple), msg);
+				log_msg("trigger on %s\n", sigfile);
 				}
 			node = SCM_CDR(node);
 			}
@@ -239,7 +242,6 @@ static SCM pulsar(void *data) {
 	struct timeval tod;
 	struct timespec nap;
 	int interval, partial;
-	//time_t now;
 	double pnow, wake, snooze;
 	interval = *((int *)data);
 	sprintf(sigpath, "%s/pulse", signals_root);
