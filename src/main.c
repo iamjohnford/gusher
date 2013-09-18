@@ -257,7 +257,7 @@ static SCM json_http_response(SCM enc_content) {
 				scm_from_locale_string("max-age=0, must-revalidate"),
 				headers);
 	headers = scm_acons(scm_from_locale_string("content-type"),
-				scm_from_locale_string("text/json; charset=UTF-8"),
+				scm_from_locale_string("application/json; charset=UTF-8"),
 				headers);
 	resp = SCM_EOL;
 	resp = scm_cons(enc_content, resp);
