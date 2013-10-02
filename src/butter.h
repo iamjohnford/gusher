@@ -17,3 +17,4 @@
 */
 
 void init_butter(void);
+SCM safe_from_utf8(const char *);

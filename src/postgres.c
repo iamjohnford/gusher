@@ -23,6 +23,7 @@
 
 #include "gtime.h"
 #include "log.h"
+#include "butter.h"
 
 #define c2s(a) (scm_from_locale_string(a))
 
@@ -152,7 +153,7 @@ static SCM pg_decode(char *string, int dtype) {
 		case 1000:
 			return (string[0] == 't' ? SCM_BOOL_T : SCM_BOOL_F);
 		}
-	return scm_from_utf8_string(string);
+	return safe_from_utf8(string);
 	}
 
 static SCM build_row(struct pg_res *pgr) {

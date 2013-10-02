@@ -92,6 +92,12 @@ static SCM string_cat(SCM glue, SCM items) {
 	return cat;
 	}
 
+
+SCM safe_from_utf8(const char *string) {
+	return scm_from_stringn(string, strlen(string), "UTF-8",
+				SCM_FAILED_CONVERSION_QUESTION_MARK);
+	}
+
 void init_butter() {
 	radix10 = scm_from_int(10);
 	scm_gc_protect_object(radix10);
