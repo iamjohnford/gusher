@@ -232,10 +232,32 @@ static SCM process_body(SCM headers, SCM body) {
 	return body;
 	}
 
-static SCM http_get(SCM url) {
+static char *get_auth_creds(SCM args) {
+	if (args == SCM_EOL) return NULL;
+	SCM upwd = scm_assq_ref(args, symbol("userpwd"));
+	if (upwd == SCM_BOOL_F) return NULL;
+	return scm_to_utf8_string(upwd);
+	}
+
+static SCM http_url_encode(SCM src) {
 	HNODE *hnode;
 	CURL *handle;
-	char *surl, errbuf[CURL_ERROR_SIZE], *bag, *pt;
+	if (scm_is_string(src)) {
+		char *ssrc, *enc;
+		ssrc = scm_to_utf8_string(src);
+		hnode = get_handle();
+		handle = hnode->handle;
+		enc = curl_easy_escape(handle, ssrc, 0);
+		free(ssrc);
+		return scm_take_locale_string(enc);
+		}
+	return scm_from_locale_string("");
+	}
+
+static SCM http_get(SCM url, SCM args) {
+	HNODE *hnode;
+	CURL *handle;
+	char *surl, errbuf[CURL_ERROR_SIZE], *bag, *pt, *userpwd;
 	CURLcode res;
 	CNODE *chunks, *next;
 	long rescode;
@@ -244,6 +266,7 @@ static SCM http_get(SCM url) {
 	hnode = get_handle();
 	handle = hnode->handle;
 	chunks = NULL;
+	userpwd = NULL;
 	headers = SCM_EOL;
 	surl = scm_to_utf8_string(url);
 	curl_easy_setopt(handle, CURLOPT_URL, surl);
@@ -255,8 +278,13 @@ static SCM http_get(SCM url) {
 	curl_easy_setopt(handle, CURLOPT_HEADERFUNCTION, header_handler);
 	curl_easy_setopt(handle, CURLOPT_HEADERDATA, (void *)&headers);
 	curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, errbuf);
+	if ((userpwd = get_auth_creds(args)) != NULL) {
+		curl_easy_setopt(handle, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+		curl_easy_setopt(handle, CURLOPT_USERPWD, userpwd);
+		}
 	res = curl_easy_perform(handle);
 	free(surl);
+	free(userpwd);
 	curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &rescode);
 	headers = scm_acons(symbol("status"), scm_from_int((int)rescode),
 				headers);
@@ -283,6 +311,7 @@ static SCM http_get(SCM url) {
 	reply = scm_cons(headers, process_body(headers, body));
 	scm_remember_upto_here_2(headers, url);
 	scm_remember_upto_here_2(body, reply);
+	scm_remember_upto_here_1(args);
 	return reply;
 	}
 
@@ -303,7 +332,8 @@ void init_http() {
 	infix = symbol("infix");
 	scm_gc_protect_object(infix);
 	scm_gc_protect_object(mutex = scm_make_mutex());
-	scm_c_define_gsubr("http-get", 1, 0, 0, http_get);
+	scm_c_define_gsubr("http-get", 1, 0, 1, http_get);
+	scm_c_define_gsubr("http-url-encode", 1, 0, 0, http_url_encode);
 	scm_c_define_gsubr("xml-node-name", 1, 0, 0, xml_node_name);
 	scm_c_define_gsubr("xml-node-attrs", 1, 0, 0, xml_node_attrs);
 	scm_c_define_gsubr("xml-node-content", 1, 0, 0, xml_node_content);
