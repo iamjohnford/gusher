@@ -239,6 +239,59 @@ static char *get_auth_creds(SCM args) {
 	return scm_to_utf8_string(upwd);
 	}
 
+struct qduple {
+	char *key;
+	char *value;
+	struct qduple *link;
+	};
+
+static char *post_data(CURL *handle, SCM args) {
+	if (args == SCM_EOL) return NULL;
+	SCM post = scm_assq_ref(args, symbol("post"));
+	if (post == SCM_BOOL_F) return NULL;
+	SCM node = post;
+	SCM pair;
+	char *value, *cpt, *buf;
+	struct qduple *duples, *duple, *pt, *next;
+	size_t nduples, len, first;
+	duples = NULL;
+	nduples = 0;
+	len = 0;
+	while (node != SCM_EOL) {
+		pair = SCM_CAR(node);
+		duple = (struct qduple *)malloc(sizeof(struct qduple));
+		nduples += 1;
+		duple->key = scm_to_utf8_string(SCM_CAR(pair));
+		value = scm_to_utf8_string(SCM_CDR(pair));
+		duple->value = curl_easy_escape(handle, value, 0);
+		free(value);
+		len += strlen(duple->key) + strlen(duple->value) + 1;
+		duple->link = duples;
+		duples = duple;
+		node = SCM_CDR(node);
+		}
+	buf = (char *)malloc(len + nduples);
+	cpt = buf;
+	pt = duples;
+	first = 1;
+	while (pt != NULL) {
+		if (!first) *cpt++ = '&';
+		first = 0;
+		next = pt->link;
+		strcpy(cpt, pt->key);
+		cpt += strlen(pt->key);
+		free(pt->key);
+		*cpt++ = '=';
+		strcpy(cpt, pt->value);
+		cpt += strlen(pt->value);
+		free(pt->value);
+		free(pt);
+		pt = next;
+		}
+	*cpt = '\0';
+	return buf;
+	}
+
 static SCM http_url_encode(SCM src) {
 	HNODE *hnode;
 	CURL *handle;
@@ -257,7 +310,7 @@ static SCM http_url_encode(SCM src) {
 static SCM http_get(SCM url, SCM args) {
 	HNODE *hnode;
 	CURL *handle;
-	char *surl, errbuf[CURL_ERROR_SIZE], *bag, *pt, *userpwd;
+	char *surl, errbuf[CURL_ERROR_SIZE], *bag, *pt, *userpwd, *post_str;
 	CURLcode res;
 	CNODE *chunks, *next;
 	long rescode;
@@ -267,6 +320,7 @@ static SCM http_get(SCM url, SCM args) {
 	handle = hnode->handle;
 	chunks = NULL;
 	userpwd = NULL;
+	post_str = NULL;
 	headers = SCM_EOL;
 	surl = scm_to_utf8_string(url);
 	curl_easy_setopt(handle, CURLOPT_URL, surl);
@@ -278,6 +332,12 @@ static SCM http_get(SCM url, SCM args) {
 	curl_easy_setopt(handle, CURLOPT_HEADERFUNCTION, header_handler);
 	curl_easy_setopt(handle, CURLOPT_HEADERDATA, (void *)&headers);
 	curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, errbuf);
+	if ((post_str = post_data(handle, args)) != NULL) {
+		curl_easy_setopt(handle, CURLOPT_POST, 1);
+		curl_easy_setopt(handle, CURLOPT_POSTFIELDS, (void *)post_str);
+		curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE, strlen(post_str));
+		}
+	else curl_easy_setopt(handle, CURLOPT_POST, 0);
 	if ((userpwd = get_auth_creds(args)) != NULL) {
 		curl_easy_setopt(handle, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
 		curl_easy_setopt(handle, CURLOPT_USERPWD, userpwd);
@@ -285,6 +345,7 @@ static SCM http_get(SCM url, SCM args) {
 	res = curl_easy_perform(handle);
 	free(surl);
 	free(userpwd);
+	free(post_str);
 	curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &rescode);
 	headers = scm_acons(symbol("status"), scm_from_int((int)rescode),
 				headers);
@@ -333,6 +394,7 @@ void init_http() {
 	scm_gc_protect_object(infix);
 	scm_gc_protect_object(mutex = scm_make_mutex());
 	scm_c_define_gsubr("http-get", 1, 0, 1, http_get);
+	scm_c_define_gsubr("http-req", 1, 0, 1, http_get);
 	scm_c_define_gsubr("http-url-encode", 1, 0, 0, http_url_encode);
 	scm_c_define_gsubr("xml-node-name", 1, 0, 0, xml_node_name);
 	scm_c_define_gsubr("xml-node-attrs", 1, 0, 0, xml_node_attrs);
