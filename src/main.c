@@ -175,7 +175,7 @@ static SCM parse_query(char *query) {
 		if ((eq = index(mark, '=')) != NULL) {
 			*eq++ = '\0';
 			list = scm_acons(makesym(mark),
-				scm_from_locale_string(decode_query(eq)), list);
+				safe_from_utf8(decode_query(eq)), list);
 			}
 		if (next == NULL) break;
 		mark = next;
@@ -368,8 +368,8 @@ static SCM start_request(char *line) {
 		query = parse_query(pt);
 		}
 	else {
-		query = SCM_EOL;
 		qstring = scm_from_locale_string("");
+		query = SCM_EOL;
 		}
 	request = scm_acons(makesym("url-path"), scm_from_locale_string(mark),
 							request);
