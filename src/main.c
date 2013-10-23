@@ -354,10 +354,9 @@ static SCM start_request(char *line) {
 	const char *method;
 	char *mark, *pt;
 	request = SCM_EOL;
-	if (line[0] == 'G') method = "get";
-	else method = "post";
-	request = scm_acons(makesym("method"), scm_from_locale_string(method),
-							request);
+	if (line[0] == 'P') method = "post";
+	else method = "get";
+	request = scm_acons(makesym("method"), makesym(method), request);
 	mark = index(line, ' ') + 1;
 	*(index(mark, ' ')) = '\0';
 	request = scm_acons(makesym("url"), scm_from_locale_string(mark),
