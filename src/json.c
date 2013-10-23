@@ -68,7 +68,8 @@ static json_t *json_build(SCM obj) {
 		jobj = json_null();
 	else if ((scm_list_p(obj) == SCM_BOOL_T) &&
 			(!scm_is_null(obj)) &&
-			(scm_pair_p(SCM_CAR(obj)) == SCM_BOOL_T)) {
+			(scm_pair_p(SCM_CAR(obj)) == SCM_BOOL_T) &&
+			scm_is_symbol(SCM_CAR(SCM_CAR(obj)))) {
 		char *key;
 		SCM pair;
 		pair = SCM_EOL;
