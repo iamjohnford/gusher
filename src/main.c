@@ -82,6 +82,11 @@ static SCM pmutex;
 static SCM qcondvars;
 static SCM scm_handlers;
 static SCM query_sym;
+static SCM method_sym;
+static SCM ctype_sym;
+static SCM clength_sym;
+static SCM post_sym;
+static SCM qstring_sym;
 static SCM radix10;
 static int nthreads = 0;
 static int busy_threads = 0;
@@ -350,13 +355,12 @@ static int mygetline(int fd, char *buf, size_t len) {
 static SCM start_request(char *line) {
 	SCM request;
 	SCM qstring;
-	SCM query;
-	const char *method;
+	SCM method;
 	char *mark, *pt;
 	request = SCM_EOL;
-	if (line[0] == 'P') method = "post";
-	else method = "get";
-	request = scm_acons(makesym("method"), makesym(method), request);
+	if (line[0] == 'P') method = post_sym;
+	else method = makesym("get");
+	request = scm_acons(makesym("method"), method, request);
 	mark = index(line, ' ') + 1;
 	*(index(mark, ' ')) = '\0';
 	request = scm_acons(makesym("url"), scm_from_locale_string(mark),
@@ -364,19 +368,15 @@ static SCM start_request(char *line) {
 	if ((pt = index(mark, '?')) != NULL) {
 		*pt++ = '\0';
 		qstring = scm_from_locale_string(pt);
-		query = parse_query(pt);
 		}
 	else {
 		qstring = scm_from_locale_string("");
-		query = SCM_EOL;
 		}
 	request = scm_acons(makesym("url-path"), scm_from_locale_string(mark),
 							request);
 //printf("URL: %s\n", mark);
-	request = scm_acons(makesym("query-string"), qstring, request);
-	request = scm_acons(query_sym, query, request);
-	scm_remember_upto_here_2(query, qstring);
-	scm_remember_upto_here_1(request);
+	request = scm_acons(qstring_sym, qstring, request);
+	scm_remember_upto_here_2(request, qstring);
 	return request;
 	}
 
@@ -490,6 +490,48 @@ static SCM run_responder(SCM request) {
 	return reply;
 	}
 
+static SCM get_in(SCM request) {
+	SCM qstring = scm_assq_ref(request, qstring_sym);
+	if (qstring == SCM_BOOL_F) return SCM_BOOL_F;
+	char *string = scm_to_locale_string(qstring);
+	SCM query = parse_query(string);
+	free(string);
+	return query;
+	}
+
+static SCM post_in(SCM request, int sock, char *residue, int avail) {
+	SCM method = scm_assq_ref(request, method_sym);
+	if (method != post_sym) return SCM_BOOL_F;
+	SCM ctype = scm_assq_ref(request, ctype_sym);
+	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
+	char *type = scm_to_locale_string(ctype);
+	if (strcmp(type, "application/x-www-form-urlencoded") != 0) {
+		free(type);
+		return SCM_BOOL_F;
+		}
+	char *len = scm_to_locale_string(scm_assq_ref(request, clength_sym));
+	int length = atoi(len);
+	free(type);
+	free(len);
+	char *buf = (char *)malloc(length + 1);
+	char *pt = buf;
+	if (avail > 0) {
+		strcpy(pt, residue);
+		pt += avail;
+		length -= avail;
+		}
+	int n;
+	while (length > 0) {
+		n = read(sock, pt, length);
+		length -= n;
+		pt += n;
+		}
+	*pt = '\0';
+	SCM query = parse_query(buf);
+	free(buf);
+	return query;
+	}
+
 static void process_request(RFRAME *frame) {
 	char buf[4096];
 	size_t avail;
@@ -525,6 +567,14 @@ static void process_request(RFRAME *frame) {
 					scm_from_locale_string(frame->ipaddr), request);
 	request = scm_acons(makesym("remote-port"),
 					scm_from_signed_integer(frame->rport), request);
+	SCM query;
+	query = post_in(request, sock, buf, avail);
+	if (query == SCM_BOOL_F) {
+		query = get_in(request);
+		if (query == SCM_BOOL_F) query = SCM_EOL;
+		}
+	request = scm_acons(query_sym, query, request);
+	scm_remember_upto_here_1(query);
 	release_frame(frame);
 	//SCM reply = dump_request(request);
 	//SCM cookie_header = SCM_BOOL_F;
@@ -686,8 +736,7 @@ static void add_thread() {
 static void init_env(void) {
 	char *here, pats[64];
 	struct stat bstat;
-	radix10 = scm_from_int(10);
-	scm_gc_protect_object(radix10);
+	scm_permanent_object(radix10 = scm_from_int(10));
 	scm_c_define_gsubr("http", 2, 0, 0, set_handler);
 	scm_c_define_gsubr("not-found", 1, 0, 0, dump_request);
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
@@ -695,8 +744,12 @@ static void init_env(void) {
 	scm_c_define_gsubr("json-response", 1, 0, 0, json_http_response);
 	scm_c_define_gsubr("query-value", 2, 0, 0, query_value);
 	scm_c_define_gsubr("query-value-number", 2, 0, 0, query_value_number);
-	query_sym = makesym("query");
-	scm_gc_protect_object(query_sym);
+	scm_permanent_object(query_sym = makesym("query"));
+	scm_permanent_object(method_sym = makesym("method"));
+	scm_permanent_object(ctype_sym = makesym("content-type"));
+	scm_permanent_object(clength_sym = makesym("content-length"));
+	scm_permanent_object(post_sym = makesym("post"));
+	scm_permanent_object(qstring_sym = makesym("query-string"));
 	threads = SCM_EOL;
 	scm_permanent_object(qmutex = scm_make_mutex());
 	scm_permanent_object(pmutex = scm_make_mutex());
