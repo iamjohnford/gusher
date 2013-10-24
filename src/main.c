@@ -338,7 +338,7 @@ static void release_frame(RFRAME *frame) {
 static int mygetline(int fd, char *buf, size_t len) {
 	int n;
 	//n = recv(fd, buf, len, 0);
-	n = read(fd, buf, len);
+	n = read(fd, buf, len - 1);
 	if (n == 0) {
 		log_msg("peer closed connection\n");
 		return 0;
@@ -347,6 +347,7 @@ static int mygetline(int fd, char *buf, size_t len) {
 		log_msg("bad recv: %s\n", strerror(errno));
 		return 0;
 		}
+	buf[n] = '\0';
 	if (index(buf, '\n') != NULL) return 1;
 	log_msg("incoming line too long\n");
 	return 0;
@@ -499,7 +500,7 @@ static SCM get_in(SCM request) {
 	return query;
 	}
 
-static SCM post_in(SCM request, int sock, char *residue, int avail) {
+static SCM post_in(SCM request, int sock, char *residue) {
 	SCM method = scm_assq_ref(request, method_sym);
 	if (method != post_sym) return SCM_BOOL_F;
 	SCM ctype = scm_assq_ref(request, ctype_sym);
@@ -515,6 +516,7 @@ static SCM post_in(SCM request, int sock, char *residue, int avail) {
 	free(len);
 	char *buf = (char *)malloc(length + 1);
 	char *pt = buf;
+	int avail = strlen(residue);
 	if (avail > 0) {
 		strcpy(pt, residue);
 		pt += avail;
@@ -533,7 +535,7 @@ static SCM post_in(SCM request, int sock, char *residue, int avail) {
 	}
 
 static void process_request(RFRAME *frame) {
-	char buf[4096];
+	char buf[1024];
 	size_t avail;
 	char *mark, *pt, *colon, *status, *body;
 	int eoh, sock;
@@ -568,7 +570,7 @@ static void process_request(RFRAME *frame) {
 	request = scm_acons(makesym("remote-port"),
 					scm_from_signed_integer(frame->rport), request);
 	SCM query;
-	query = post_in(request, sock, buf, avail);
+	query = post_in(request, sock, buf);
 	if (query == SCM_BOOL_F) {
 		query = get_in(request);
 		if (query == SCM_BOOL_F) query = SCM_EOL;
