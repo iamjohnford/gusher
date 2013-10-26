@@ -613,7 +613,7 @@ static SCM body_req(void *data) {
 	return SCM_BOOL_T;
 	}
 
-static const char *err_msg = "HTTP/1.1 500 Internal Server Error\r\nContent-type: text/plain\r\n\r\nwuh-oh! gusher application error\r\n";
+static const char *err_msg = "HTTP/1.1 500 Internal Server Error\r\nContent-type: text/plain\r\n\r\nGusher application error. Someone will attend to this soon, if they aren't already.\r\n";
 
 static SCM captured_stack = SCM_BOOL_F;
 
