@@ -54,6 +54,7 @@
 #define DEFAULT_MAX_THREADS 32
 #define POLL_TIMEOUT 3000
 #define POLICE_INTVL 6
+#define POST_MEM_MAX 1000000
 #define DEFAULT_GUSHER_ROOT "/var/lib/gusher"
 
 struct handler_entry {
@@ -514,7 +515,15 @@ static SCM post_in(SCM request, int sock, char *residue) {
 	int length = atoi(len);
 	free(type);
 	free(len);
+	if (length > POST_MEM_MAX) {
+		log_msg("truncated POST malloc: %d -> %d\n", length, POST_MEM_MAX);
+		length = POST_MEM_MAX;
+		}
 	char *buf = (char *)malloc(length + 1);
+	if (buf == NULL) {
+		log_msg("failed POST malloc\n");
+		return SCM_EOL;
+		}
 	char *pt = buf;
 	int avail = strlen(residue);
 	if (avail > 0) {
