@@ -350,7 +350,7 @@ static int mygetline(int fd, char *buf, size_t len) {
 		}
 	buf[n] = '\0';
 	if (index(buf, '\n') != NULL) return 1;
-	log_msg("incoming line too long\n");
+	log_msg("incoming line too long: '%s'\n", buf);
 	return 0;
 	}
 
