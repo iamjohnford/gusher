@@ -56,6 +56,10 @@
 #define POLICE_INTVL 6
 #define POST_MEM_MAX 1000000
 #define DEFAULT_GUSHER_ROOT "/var/lib/gusher"
+#define GETLINE_OK 1
+#define GETLINE_PEER_CLOSED 2
+#define GETLINE_READ_ERR 3
+#define GETLINE_TOO_LONG 4
 
 struct handler_entry {
 	char *path;
@@ -342,16 +346,16 @@ static int mygetline(int fd, char *buf, size_t len) {
 	n = read(fd, buf, len - 1);
 	if (n == 0) {
 		log_msg("peer closed connection\n");
-		return 0;
+		return GETLINE_PEER_CLOSED;
 		}
 	if (n < 0) {
 		log_msg("bad recv: %s\n", strerror(errno));
-		return 0;
+		return GETLINE_READ_ERR;
 		}
 	buf[n] = '\0';
-	if (index(buf, '\n') != NULL) return 1;
+	if (index(buf, '\n') != NULL) return GETLINE_OK;
 	log_msg("incoming line too long: '%s'\n", buf);
-	return 0;
+	return GETLINE_TOO_LONG;
 	}
 
 static SCM start_request(char *line) {
@@ -547,14 +551,17 @@ static void process_request(RFRAME *frame) {
 	char buf[1024];
 	size_t avail;
 	char *mark, *pt, *colon, *status, *body;
-	int eoh, sock;
+	int eoh, sock, res;
 	SCM request;
 	sock = frame->sock;
 	eoh = 0;
 	avail = sizeof(buf);
 	request = SCM_EOL;
 	while (!eoh) { // build request
-		if (!mygetline(sock, buf, avail)) break;
+		res = mygetline(sock, buf, avail);
+		if (res == GETLINE_PEER_CLOSED) return;
+		if (res == GETLINE_READ_ERR) return;
+		if (res == GETLINE_TOO_LONG) break;
 		pt = buf;
 		while ((mark = index(pt, '\n')) != NULL) {
 			mark++;
