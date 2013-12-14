@@ -152,11 +152,7 @@ static SCM fetch_node(SCM smob, SCM args) {
 		else node->payload = SCM_BOOL_F;
 		break;
 	case TYPE_CHAIN:
-		if (scm_is_null(args))
-			node->payload = scm_call_0(node->callback);
-		else
-			node->payload = scm_call_1(node->callback,
-						SCM_CAR(args));
+		node->payload = scm_apply_0(node->callback, args);
 		break;
 		}
 	payload = node->payload;
