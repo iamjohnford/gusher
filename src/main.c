@@ -22,12 +22,14 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <sys/mman.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <string.h>
 #include <libguile.h>
 #include <ctype.h>
@@ -60,6 +62,7 @@
 #define GETLINE_PEER_CLOSED 2
 #define GETLINE_READ_ERR 3
 #define GETLINE_TOO_LONG 4
+#define GETLINE_DRAINED 5
 
 struct handler_entry {
 	char *path;
@@ -342,20 +345,30 @@ static void release_frame(RFRAME *frame) {
 
 static int mygetline(int fd, char *buf, size_t len) {
 	int n;
-	//n = recv(fd, buf, len, 0);
-	n = read(fd, buf, len - 1);
-	if (n == 0) {
-		log_msg("peer closed connection\n");
-		return GETLINE_PEER_CLOSED;
+	int i;
+	i = 0;
+	while (1) {
+		if (i >= len) {
+			buf[len - 1] = '\0';
+			log_msg("incoming line too long: '%s'\n", buf);
+			return GETLINE_TOO_LONG;
+			}
+		n = read(fd, &buf[i], 1);
+		if (n == 0) {
+			log_msg("peer closed connection\n");
+			return GETLINE_PEER_CLOSED;
+			}
+		else if (n < 0) {
+			log_msg("bad recv: %s\n", strerror(errno));
+			return GETLINE_READ_ERR;
+			}
+		if (buf[i] == '\n') {
+			if (buf[i - 1] == '\r') buf[i - 1] = '\0';
+			else buf[i] = '\0';
+			return GETLINE_OK;
+			}
+		i++;
 		}
-	if (n < 0) {
-		log_msg("bad recv: %s\n", strerror(errno));
-		return GETLINE_READ_ERR;
-		}
-	buf[n] = '\0';
-	if (index(buf, '\n') != NULL) return GETLINE_OK;
-	log_msg("incoming line too long: '%s'\n", buf);
-	return GETLINE_TOO_LONG;
 	}
 
 static SCM start_request(char *line) {
@@ -380,7 +393,6 @@ static SCM start_request(char *line) {
 		}
 	request = scm_acons(makesym("url-path"), scm_from_locale_string(mark),
 							request);
-//printf("URL: %s\n", mark);
 	request = scm_acons(qstring_sym, qstring, request);
 	scm_remember_upto_here_2(request, qstring);
 	return request;
@@ -505,20 +517,20 @@ static SCM get_in(SCM request) {
 	return query;
 	}
 
-static SCM post_in(SCM request, int sock, char *residue) {
-	SCM method = scm_assq_ref(request, method_sym);
-	if (method != post_sym) return SCM_BOOL_F;
-	SCM ctype = scm_assq_ref(request, ctype_sym);
-	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
-	char *type = scm_to_locale_string(ctype);
-	if (strcmp(type, "application/x-www-form-urlencoded") != 0) {
-		free(type);
-		return SCM_BOOL_F;
-		}
-	char *len = scm_to_locale_string(scm_assq_ref(request, clength_sym));
+static int request_length(SCM request) {
+	SCM clength = scm_assq_ref(request, clength_sym);
+	if (clength == SCM_BOOL_F) return 0;
+	char *len = scm_to_locale_string(clength);
 	int length = atoi(len);
-	free(type);
 	free(len);
+	return length;
+	}
+
+static SCM form_urlencoded(SCM request, int sock) {
+	//char *len = scm_to_locale_string(scm_assq_ref(request, clength_sym));
+	//int length = atoi(len);
+	int length = request_length(request);
+	//free(len);
 	if (length > POST_MEM_MAX) {
 		log_msg("truncated POST malloc: %d -> %d\n", length, POST_MEM_MAX);
 		length = POST_MEM_MAX;
@@ -529,12 +541,6 @@ static SCM post_in(SCM request, int sock, char *residue) {
 		return SCM_EOL;
 		}
 	char *pt = buf;
-	int avail = strlen(residue);
-	if (avail > 0) {
-		strcpy(pt, residue);
-		pt += avail;
-		length -= avail;
-		}
 	int n;
 	while (length > 0) {
 		n = read(sock, pt, length);
@@ -547,50 +553,219 @@ static SCM post_in(SCM request, int sock, char *residue) {
 	return query;
 	}
 
+static char *strcasestr(const char *haystack, const char *needle) {
+	const char *pt1, *pt2;
+	char *anchor;
+	pt1 = haystack;
+	pt2 = needle;
+	anchor = (char *)pt1;
+	while (1) {
+		if (*pt2 == '\0') return anchor;
+		if (*pt1 == '\0') return NULL;
+		if (toupper(*pt1) != toupper(*pt2)) {
+			pt1++;
+			pt2 = needle;
+			anchor = NULL;
+			}
+		else {
+			if (anchor == NULL) anchor = (char *)pt1;
+			pt1++;
+			pt2++;
+			}
+		}
+	return NULL;
+	}
+
+static SCM process_chunk(char *chunk, size_t len) {
+	char *pt, *stop;
+	SCM key, orig_file;
+	//log_msg("CHUNK: |%s|\n", chunk);
+	log_msg("CHUNK: %d\n", len);
+	key = SCM_EOL;
+	orig_file = SCM_EOL;
+	pt = chunk;
+	while (1) {
+		stop = index(pt, '\n');
+		if (stop == NULL) break;
+		if (*(stop - 1) == '\r') *(stop - 1) = '\0';
+		else *stop = '\0';
+		if (*pt == '\0') {
+			pt = stop + 1;
+			break;
+			}
+		log_msg("CHKHDR: |%s|\n", pt);
+		if (strcasestr(pt, "content-disposition") == pt) {
+			char *pt2, *pt3;
+			if ((pt2 = strcasestr(pt, "; name=\"")) != NULL) {
+				pt2 = index(pt2, '"') + 1;
+				pt3 = index(pt2, '"');
+				*pt3 = '\0';
+				log_msg("\tDNAME: |%s|\n", pt2);
+				key = makesym(pt2);
+				*pt3 = '"';
+				}
+			if ((pt2 = strcasestr(pt, "; filename=\"")) != NULL) {
+				pt2 = index(pt2, '"') + 1;
+				pt3 = index(pt2, '"');
+				*pt3 = '\0';
+				log_msg("\tFNAME: |%s|\n", pt2);
+				orig_file = scm_from_locale_string(pt2);
+				*pt3 = '"';
+				}
+			}
+		pt = stop + 1;
+		}
+	if (orig_file != SCM_EOL) {
+		int fd = open("/tmp/gusher_payload",
+			O_WRONLY | O_TRUNC |O_CREAT, 0644);
+		write(fd, pt, len - (pt - chunk));
+		close(fd);
+		return scm_cons(key, scm_cons(scm_from_locale_string("/tmp/gusher_payload"), orig_file));
+		}
+	return scm_cons(key, scm_cons(scm_from_stringn(pt, len - (pt - chunk),
+			"UTF-8", SCM_FAILED_CONVERSION_QUESTION_MARK), orig_file));
+	}
+
+static char *memscan(char *haystack, size_t field, const char *needle) {
+	size_t nlen;
+	char *pt;
+	pt = haystack;
+	nlen = strlen(needle);
+//printf("seek: |%s| in %d\n", needle, field);
+	while (1) {
+//printf("check %d at %08x\n", field, pt);
+		if (field < nlen) break;
+		if (memcmp(pt, needle, nlen) == 0) return pt;
+		pt++;
+		field--;
+		}
+//printf("memscan not found\n");
+	return NULL;
+	}
+
+static SCM form_multipart(SCM request, int sock, char *ctype) {
+	char *boundary = strstr(ctype, "boundary=");
+	if (boundary == NULL) {
+		free(ctype);
+		return SCM_BOOL_F;
+		}
+	char tmppath[64], rboundary[256];
+	char buf[4096], *cursor, *stop, *old_cursor;
+	int b_len, fd;
+	size_t maplen, n, field;
+	void *map;
+	int fcache, clength;
+	SCM query;
+	query = SCM_EOL;
+	boundary = index(boundary, '-');
+	strcpy(rboundary, "\r\n--");
+	strcat(rboundary, boundary);
+	b_len = strlen(rboundary);
+	strcpy(tmppath, "/tmp/gusher_XXXXXX");
+	fcache = mkstemp(tmppath);
+	maplen = 0;
+	clength = request_length(request);
+	while ((n = read(sock, buf, sizeof(buf))) >= 0) {
+		if (n == 0) {
+			if (clength < 1) break;
+			continue;
+			}
+		write(fcache, buf, n);
+		maplen += n;
+		clength -= n;
+		if (clength <= 0) break;
+		}
+	close(fcache);
+	field = maplen;
+	fd = open(tmppath, O_RDONLY);
+	map = mmap(NULL, maplen, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+	log_msg("got multipart, boundary: |%s|\n", boundary);
+	if (map == MAP_FAILED) {
+		close(fd);
+		unlink(tmppath);
+		log_msg("multipart: mmap failed, abort: [%d] %s\n",
+			errno, strerror(errno));
+		free(ctype);
+		return SCM_BOOL_F;
+		}
+	cursor = (char *)map;
+	cursor = index(cursor, '\n') + 1; // skip past first boundary
+	while ((stop = memscan(cursor, field, rboundary)) != NULL) {
+		*stop = '\0';
+		query = scm_cons(process_chunk(cursor, stop - cursor), query);
+		old_cursor = cursor;
+		cursor = stop + b_len;
+		cursor = index(cursor, '\n') + 1;
+		field -= (cursor - old_cursor);
+		}
+	munmap(map, maplen);
+	close(fd);
+	//unlink(tmppath);
+	free(ctype);
+	return query;
+	}
+
+static SCM post_in(SCM request, int sock) {
+	SCM method = scm_assq_ref(request, method_sym);
+	if (method != post_sym) return SCM_BOOL_F;
+	SCM ctype = scm_assq_ref(request, ctype_sym);
+	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
+	char *type = scm_to_locale_string(ctype);
+	if (strcmp(type, "application/x-www-form-urlencoded") == 0) {
+		free(type);
+		return form_urlencoded(request, sock);
+		}
+	if (strstr(type, "multipart/form-data;") == type) {
+		return form_multipart(request, sock, type);
+		}
+	free(type);
+	return SCM_BOOL_F;
+	}
+
 static void process_request(RFRAME *frame) {
 	char buf[1024];
 	size_t avail;
-	char *mark, *pt, *colon, *status, *body;
-	int eoh, sock, res;
+	char *pt, *colon, *status, *body;
+	int sock, res;
 	SCM request;
 	sock = frame->sock;
-	eoh = 0;
 	avail = sizeof(buf);
 	request = SCM_EOL;
-	while (!eoh) { // build request
+	while (1) { // build request
 		res = mygetline(sock, buf, avail);
 		if (res == GETLINE_PEER_CLOSED) return;
 		if (res == GETLINE_READ_ERR) return;
 		if (res == GETLINE_TOO_LONG) break;
 		pt = buf;
-		while ((mark = index(pt, '\n')) != NULL) {
-			mark++;
-			*(mark - 1) = '\0';
-			if (*(mark - 2) == '\r') *(mark - 2) = '\0';
-			if (strlen(pt) == 0) eoh = 1;
-			else if (request == SCM_EOL) // first line of req
-				request = start_request(pt);
-			else if ((colon = index(pt, ':')) != NULL) {
-				*colon++ = '\0';
-				while (*colon && isspace(*colon)) colon++;
-				request = scm_acons(makesym(downcase(pt)),
-						scm_from_locale_string(colon), request);
-				}
-			pt = mark;
+//log_msg("LINE |%s|\n", pt);
+		if (buf[0] == '\0') break;
+		if (request == SCM_EOL) // first line of req
+			request = start_request(pt);
+		else if ((colon = index(pt, ':')) != NULL) {
+			*colon++ = '\0';
+			while (*colon && isspace(*colon)) colon++;
+			request = scm_acons(makesym(downcase(pt)),
+					scm_from_locale_string(colon), request);
 			}
-		avail = pt - buf;
-		memmove((void *)buf, pt, sizeof(buf) - avail);
 		}
 	request = scm_acons(makesym("remote-host"),
 					scm_from_locale_string(frame->ipaddr), request);
 	request = scm_acons(makesym("remote-port"),
 					scm_from_signed_integer(frame->rport), request);
 	SCM query;
-	query = post_in(request, sock, buf);
+	query = post_in(request, sock);
 	if (query == SCM_BOOL_F) {
 		query = get_in(request);
 		if (query == SCM_BOOL_F) query = SCM_EOL;
 		}
+{
+	SCM ctype = scm_assq_ref(request, ctype_sym);
+	char *type;
+	if (ctype == SCM_BOOL_F) type = strdup("#f");
+	else type = scm_to_locale_string(ctype);
+	log_msg("content-type is |%s|\n", type);
+	free(type);
+}
 	request = scm_acons(query_sym, query, request);
 	scm_remember_upto_here_1(query);
 	release_frame(frame);
