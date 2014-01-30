@@ -705,12 +705,23 @@ static SCM form_multipart(SCM request, int sock, char *ctype) {
 	return query;
 	}
 
+static void show_content_type(SCM request) {
+	SCM ctype = scm_assq_ref(request, ctype_sym);
+	char *type;
+	if (ctype == SCM_BOOL_F) type = strdup("#f");
+	else type = scm_to_locale_string(ctype);
+	log_msg("content-type is |%s|\n", type);
+	free(type);
+	return;
+	}
+
 static SCM post_in(SCM request, int sock) {
 	SCM method = scm_assq_ref(request, method_sym);
 	if (method != post_sym) return SCM_BOOL_F;
 	SCM ctype = scm_assq_ref(request, ctype_sym);
 	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
 	char *type = scm_to_locale_string(ctype);
+	show_content_type(request);
 	if (strcmp(type, "application/x-www-form-urlencoded") == 0) {
 		free(type);
 		return form_urlencoded(request, sock);
@@ -737,7 +748,7 @@ static void process_request(RFRAME *frame) {
 		if (res == GETLINE_READ_ERR) return;
 		if (res == GETLINE_TOO_LONG) break;
 		pt = buf;
-//log_msg("LINE |%s|\n", pt);
+log_msg("LINE |%s|\n", pt);
 		if (buf[0] == '\0') break;
 		if (request == SCM_EOL) // first line of req
 			request = start_request(pt);
@@ -758,14 +769,6 @@ static void process_request(RFRAME *frame) {
 		query = get_in(request);
 		if (query == SCM_BOOL_F) query = SCM_EOL;
 		}
-{
-	SCM ctype = scm_assq_ref(request, ctype_sym);
-	char *type;
-	if (ctype == SCM_BOOL_F) type = strdup("#f");
-	else type = scm_to_locale_string(ctype);
-	log_msg("content-type is |%s|\n", type);
-	free(type);
-}
 	request = scm_acons(query_sym, query, request);
 	scm_remember_upto_here_1(query);
 	release_frame(frame);
