@@ -722,7 +722,7 @@ static SCM post_in(SCM request, int sock) {
 	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
 	char *type = scm_to_locale_string(ctype);
 	show_content_type(request);
-	if (strcmp(type, "application/x-www-form-urlencoded") == 0) {
+	if (strstr(type, "application/x-www-form-urlencoded") != NULL) {
 		free(type);
 		return form_urlencoded(request, sock);
 		}
@@ -934,6 +934,7 @@ static void init_env(void) {
 	struct stat bstat;
 	scm_permanent_object(radix10 = scm_from_int(10));
 	scm_c_define_gsubr("http", 2, 0, 0, set_handler);
+	scm_c_define_gsubr("responder", 2, 0, 0, set_handler);
 	scm_c_define_gsubr("not-found", 1, 0, 0, dump_request);
 	scm_c_define_gsubr("uuid-generate", 0, 0, 0, uuid_gen);
 	scm_c_define_gsubr("simple-response", 2, 0, 0, simple_http_response);
