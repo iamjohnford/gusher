@@ -63,12 +63,14 @@ typedef struct file_node {
 
 static SCM file_sym;
 static SCM data_sym;
+static SCM stamp_sym;
 static FILE_NODE *file_nodes = NULL;
 static scm_t_bits make_node_tag;
 static scm_t_bits kvdb_node_tag;
 static SCM sessions_db;
 static SCM kv_reader;
 static SCM kv_writer;
+extern SCM session_sym;
 
 static void invalidate(MAKE_NODE *node) {
 	SCM cursor;
@@ -265,7 +267,7 @@ static SCM kv_set(SCM db, SCM key, SCM value) {
 	}
 
 static SCM kv_get(SCM db, SCM key) {
-	size_t vsiz;
+	int32_t vsiz;
 	char *skey, *value;
 	KVDB_NODE *node;
 	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
@@ -301,7 +303,7 @@ static SCM kv_count(SCM db) {
 
 static SCM kv_keys(SCM db) {
 	KVDB_NODE *node;
-	size_t n;
+	int64_t n;
 	char **keys;
 	SCM list;
 	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
@@ -416,22 +418,42 @@ static size_t free_kvdb(SCM smob) {
 	return 0;
 	}
 
-SCM get_session(const char *sesskey) {
+static SCM session_key(SCM request) {
+	return scm_assq_ref(request, session_sym);
+	}
+
+static SCM session_set(SCM request, SCM key, SCM value) {
+	SCM db = kv_open(sessions_db, kv_writer);
+	SCM sesskey = session_key(request);
+	SCM alist = kv_get(db, sesskey);
+	if (alist == SCM_BOOL_F) alist = SCM_EOL;
+	else alist = json_decode(alist);
+	alist = scm_assq_set_x(alist, stamp_sym, scm_from_ulong(time(NULL)));
+	alist = scm_assq_set_x(alist, key, value);
+	SCM res = kv_set(db, sesskey, json_encode(alist));
+	kv_close(db);
+	scm_remember_upto_here_2(db, sesskey);
+	scm_remember_upto_here_2(alist, res);
+	return res;
+	}
+
+static SCM session_read(SCM request) {
 	SCM val;
 	SCM db = kv_open(sessions_db, kv_reader);
-	val = kv_get(db, scm_from_locale_string(sesskey));
+	SCM sesskey = session_key(request);
+	val = kv_get(db, sesskey);
+	scm_remember_upto_here_1(sesskey);
 	kv_close(db);
 	if (val == SCM_BOOL_F) return SCM_BOOL_F;
 	scm_remember_upto_here_2(val, db);
 	return json_decode(val);
 	}
 
-SCM put_session(const char *sesskey, SCM table) {
-	SCM db = kv_open(sessions_db, kv_writer);
-	SCM res = kv_set(db, scm_from_locale_string(sesskey),
-						json_encode(table));
-	kv_close(db);
-	return res;
+static SCM session_get(SCM request, SCM key) {
+	SCM sess_data = session_read(request);
+	if (sess_data == SCM_BOOL_F) return SCM_BOOL_F;
+	scm_remember_upto_here_1(sess_data);
+	return scm_assq_ref(sess_data, key);
 	}
 
 void shutdown_cache(void) {
@@ -454,6 +476,7 @@ void init_cache(void) {
 	scm_gc_protect_object(sessions_db);
 	scm_permanent_object(file_sym = scm_from_utf8_symbol("file"));
 	scm_permanent_object(data_sym = scm_from_utf8_symbol("data"));
+	scm_permanent_object(stamp_sym = scm_from_utf8_symbol("stamp"));
 	scm_c_define_gsubr("make-doc", 2, 0, 0, make_doc);
 	scm_c_define_gsubr("touch-doc", 1, 0, 1, touch_node);
 	scm_c_define_gsubr("fetch-doc", 1, 0, 1, fetch_node);
@@ -470,5 +493,9 @@ void init_cache(void) {
 	scm_c_define_gsubr("kv-count", 1, 0, 0, kv_count);
 	scm_c_define_gsubr("kv-keys", 1, 0, 0, kv_keys);
 	scm_c_define_gsubr("kv-del", 2, 0, 0, kv_del);
+	scm_c_define_gsubr("session-key", 1, 0, 0, session_key);
+	scm_c_define_gsubr("session-read", 1, 0, 0, session_read);
+	scm_c_define_gsubr("session-get", 2, 0, 0, session_get);
+	scm_c_define_gsubr("session-set", 3, 0, 0, session_set);
 //	scm_c_define_gsubr("watch-edit", 1, 0, 0, watch_edit);
 	}
