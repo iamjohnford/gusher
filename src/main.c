@@ -95,6 +95,7 @@ static SCM ctype_sym;
 static SCM clength_sym;
 static SCM post_sym;
 static SCM qstring_sym;
+SCM session_sym;
 static SCM radix10;
 static int nthreads = 0;
 static int busy_threads = 0;
@@ -485,14 +486,7 @@ static SCM run_responder(SCM request) {
 			cookie_header = scm_cons(scm_from_latin1_string("set-cookie"),
 				scm_from_latin1_string(buf));
 			}
-		if (get_session(cookie) == SCM_BOOL_F) {
-			SCM session;
-			session = SCM_EOL;
-			session = scm_acons(makesym("_NEW_"), SCM_BOOL_T, session);
-			put_session(cookie, session);
-			scm_remember_upto_here_1(session);
-			}
-		request = scm_acons(makesym("session"),
+		request = scm_acons(session_sym,
 						scm_take_locale_string(cookie), request);
 		request = scm_acons(makesym("path-info"),
 						SCM_CDR(handler), request);
@@ -748,7 +742,7 @@ static void process_request(RFRAME *frame) {
 		if (res == GETLINE_READ_ERR) return;
 		if (res == GETLINE_TOO_LONG) break;
 		pt = buf;
-log_msg("LINE |%s|\n", pt);
+//log_msg("LINE |%s|\n", pt);
 		if (buf[0] == '\0') break;
 		if (request == SCM_EOL) // first line of req
 			request = start_request(pt);
@@ -947,6 +941,7 @@ static void init_env(void) {
 	scm_permanent_object(clength_sym = makesym("content-length"));
 	scm_permanent_object(post_sym = makesym("post"));
 	scm_permanent_object(qstring_sym = makesym("query-string"));
+	scm_permanent_object(session_sym = makesym("session"));
 	threads = SCM_EOL;
 	scm_permanent_object(qmutex = scm_make_mutex());
 	scm_permanent_object(pmutex = scm_make_mutex());
