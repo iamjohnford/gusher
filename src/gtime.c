@@ -51,7 +51,7 @@ SCM local_time_intern(int year, int month, int day,
 		bump = 1;
 		usec -= 1000000;
 		}
-	if ((epoch = mktime(&pad)) < 0) return SCM_BOOL_F;
+	if ((epoch = mktime(&pad)) == -1) return SCM_BOOL_F;
 	if (bump) epoch += 1;
 	time = (struct g_time *)scm_gc_malloc(sizeof(struct g_time),
 					"timestamp");
