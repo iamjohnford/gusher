@@ -36,6 +36,7 @@ struct pg_res {
 	int cursor;
 	int nfields;
 	int tuples;
+	int cmd_tuples;
 	SCM types;
 	SCM fields;
 	};
@@ -94,6 +95,7 @@ static SCM pg_exec(SCM conn, SCM query) {
 	pgr->types = SCM_EOL;
 	pgr->nfields = PQnfields(pgr->res);
 	pgr->tuples = PQntuples(pgr->res);
+	pgr->cmd_tuples = atoi(PQcmdTuples(pgr->res));
 	for (i = pgr->nfields - 1; i >= 0; i--) {
 		pgr->fields = scm_cons(scm_from_utf8_symbol(
 			PQfname(pgr->res, i)), pgr->fields);
@@ -295,6 +297,16 @@ static SCM pg_tuples(SCM res) {
 	return out;
 	}
 
+static SCM pg_cmd_tuples(SCM res) {
+	struct pg_res *pgr;
+	SCM out;
+	scm_assert_smob_type(pg_res_tag, res);
+	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
+	out = scm_from_signed_integer(pgr->cmd_tuples);
+	scm_remember_upto_here_2(res, out);
+	return out;
+	}
+
 static size_t free_pg_conn(SCM smob) {
 	struct pg_conn *pgc;
 	pgc = (struct pg_conn *)SCM_SMOB_DATA(smob);
@@ -343,7 +355,7 @@ static SCM pg_format_sql(SCM conn, SCM obj) {
 			scm_lock_mutex(dbh_mutex);
 			char *sql = PQescapeLiteral(pgc->conn,
 					src, strlen(src));
-			out = c2s(sql);
+			out = safe_from_utf8(sql);
 			scm_unlock_mutex(dbh_mutex);
 			free(src);
 			PQfreemem(sql);
@@ -377,6 +389,7 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-exec", 2, 0, 0, pg_exec);
 	scm_c_define_gsubr("pg-clear", 1, 0, 0, pg_clear);
 	scm_c_define_gsubr("pg-tuples", 1, 0, 0, pg_tuples);
+	scm_c_define_gsubr("pg-cmd-tuples", 1, 0, 0, pg_cmd_tuples);
 	scm_c_define_gsubr("pg-fields", 1, 0, 0, pg_fields);
 	scm_c_define_gsubr("pg-get-row", 1, 0, 0, pg_get_row);
 	scm_c_define_gsubr("pg-each-row", 2, 0, 0, pg_each_row);
