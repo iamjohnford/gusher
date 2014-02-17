@@ -6,7 +6,7 @@ web application server written in C and embedding the
 GNU [Guile](http://www.gnu.org/software/guile/) extension environment
 to host applications written in
 [Scheme](https://en.wikipedia.org/wiki/Scheme_%28programming_language%29).
-Each gusher web application runs as a free-standing dedicated web server,
+Each gusher web application runs as a free-standing web server,
 but will typically 
 be proxied by a general-purpose web server such as apache or nginx.
 Features include:
