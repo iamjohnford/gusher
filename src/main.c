@@ -542,6 +542,9 @@ static SCM form_urlencoded(SCM request, int sock) {
 		pt += n;
 		}
 	*pt = '\0';
+FILE *tmp = fopen("/tmp/urlencode", "w");
+fputs(buf, tmp);
+fclose(tmp);
 	SCM query = parse_query(buf);
 	free(buf);
 	return query;
@@ -728,7 +731,7 @@ static SCM post_in(SCM request, int sock) {
 	}
 
 static void process_request(RFRAME *frame) {
-	char buf[1024];
+	char buf[4096];
 	size_t avail;
 	char *pt, *colon, *status, *body;
 	int sock, res;
