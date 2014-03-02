@@ -189,7 +189,9 @@ static SCM parse_query(char *query) {
 		if ((eq = index(mark, '=')) != NULL) {
 			*eq++ = '\0';
 			list = scm_acons(makesym(mark),
-				safe_from_utf8(decode_query(eq)), list);
+				//safe_from_utf8(decode_query(eq)),
+				scm_from_latin1_string(decode_query(eq)),
+				list);
 			}
 		if (next == NULL) break;
 		mark = next;
