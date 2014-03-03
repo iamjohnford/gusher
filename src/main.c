@@ -615,11 +615,13 @@ static SCM process_chunk(char *chunk, size_t len) {
 		pt = stop + 1;
 		}
 	if (orig_file != SCM_EOL) {
-		int fd = open("/tmp/gusher_payload",
-			O_WRONLY | O_TRUNC |O_CREAT, 0644);
+		char tmppath[64];
+		strcpy(tmppath, "/tmp/gusher_payload_XXXXXX");
+		int fd = mkstemp(tmppath);
 		write(fd, pt, len - (pt - chunk));
 		close(fd);
-		return scm_cons(key, scm_cons(scm_from_locale_string("/tmp/gusher_payload"), orig_file));
+		return scm_cons(key,
+			scm_cons(scm_from_locale_string(tmppath), orig_file));
 		}
 	return scm_cons(key, scm_from_stringn(pt, len - (pt - chunk),
 			"UTF-8", SCM_FAILED_CONVERSION_QUESTION_MARK));
@@ -699,7 +701,7 @@ static SCM form_multipart(SCM request, int sock, char *ctype) {
 		}
 	munmap(map, maplen);
 	close(fd);
-	//unlink(tmppath);
+	unlink(tmppath);
 	free(ctype);
 	return query;
 	}
