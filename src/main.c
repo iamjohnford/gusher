@@ -579,7 +579,7 @@ static SCM process_chunk(char *chunk, size_t len) {
 	char *pt, *stop;
 	SCM key, orig_file;
 	//log_msg("CHUNK: |%s|\n", chunk);
-	log_msg("CHUNK: %d\n", len);
+	//log_msg("CHUNK: %d\n", len);
 	key = SCM_EOL;
 	orig_file = SCM_EOL;
 	pt = chunk;
@@ -592,14 +592,14 @@ static SCM process_chunk(char *chunk, size_t len) {
 			pt = stop + 1;
 			break;
 			}
-		log_msg("CHKHDR: |%s|\n", pt);
+		//log_msg("CHKHDR: |%s|\n", pt);
 		if (strcasestr(pt, "content-disposition") == pt) {
 			char *pt2, *pt3;
 			if ((pt2 = strcasestr(pt, "; name=\"")) != NULL) {
 				pt2 = index(pt2, '"') + 1;
 				pt3 = index(pt2, '"');
 				*pt3 = '\0';
-				log_msg("\tDNAME: |%s|\n", pt2);
+				//log_msg("\tDNAME: |%s|\n", pt2);
 				key = makesym(pt2);
 				*pt3 = '"';
 				}
@@ -607,7 +607,7 @@ static SCM process_chunk(char *chunk, size_t len) {
 				pt2 = index(pt2, '"') + 1;
 				pt3 = index(pt2, '"');
 				*pt3 = '\0';
-				log_msg("\tFNAME: |%s|\n", pt2);
+				//log_msg("\tFNAME: |%s|\n", pt2);
 				orig_file = scm_from_locale_string(pt2);
 				*pt3 = '"';
 				}
@@ -621,8 +621,8 @@ static SCM process_chunk(char *chunk, size_t len) {
 		close(fd);
 		return scm_cons(key, scm_cons(scm_from_locale_string("/tmp/gusher_payload"), orig_file));
 		}
-	return scm_cons(key, scm_cons(scm_from_stringn(pt, len - (pt - chunk),
-			"UTF-8", SCM_FAILED_CONVERSION_QUESTION_MARK), orig_file));
+	return scm_cons(key, scm_from_stringn(pt, len - (pt - chunk),
+			"UTF-8", SCM_FAILED_CONVERSION_QUESTION_MARK));
 	}
 
 static char *memscan(char *haystack, size_t field, const char *needle) {
