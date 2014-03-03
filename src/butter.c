@@ -20,10 +20,28 @@
 #include <libguile.h>
 #include <time.h>
 #include <stdarg.h>
+#include <gcrypt.h>
 
 static SCM radix10;
 static SCM infix;
 static SCM string_cat_proc;
+
+static SCM sha256_sum(SCM src) {
+	int i;
+	int hashlen = gcry_md_get_algo_dlen(GCRY_MD_SHA256);
+	unsigned char *hash = (unsigned char *)malloc(hashlen);
+	char *hex = (char *)malloc(hashlen * 2 + 1);
+	char *pt = hex;
+	char *src_s = scm_to_locale_string(src);
+	gcry_md_hash_buffer(GCRY_MD_SHA256, hash, src_s, strlen(src_s));
+	free(src_s);
+	for (i = 0; i < hashlen; i++) {
+		snprintf(pt, 3, "%02x", hash[i]);
+		pt += 2;
+		}
+	free(hash);
+	return scm_take_locale_string(hex);
+	}
 
 static SCM to_s(SCM obj) {
 	if (scm_is_string(obj)) return obj;
@@ -107,6 +125,7 @@ void init_butter() {
 	scm_c_define_gsubr("to-i", 1, 0, 0, to_i);
 	scm_c_define_gsubr("to-f", 1, 0, 0, to_f);
 	scm_c_define_gsubr("string-cat", 1, 0, 1, string_cat);
+	scm_c_define_gsubr("sha-256-sum", 1, 0, 1, sha256_sum);
 	string_cat_proc = scm_c_eval_string("string-cat");
 	scm_gc_protect_object(string_cat_proc);
 	}
