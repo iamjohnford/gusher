@@ -294,13 +294,12 @@ static char *post_data(CURL *handle, SCM args) {
 
 static SCM http_url_encode(SCM src) {
 	HNODE *hnode;
-	CURL *handle;
 	if (scm_is_string(src)) {
 		char *ssrc, *enc;
 		ssrc = scm_to_utf8_string(src);
 		hnode = get_handle();
-		handle = hnode->handle;
-		enc = curl_easy_escape(handle, ssrc, 0);
+		enc = curl_easy_escape(hnode->handle, ssrc, 0);
+		release_handle(hnode);
 		free(ssrc);
 		return scm_take_locale_string(enc);
 		}
