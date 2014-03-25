@@ -728,7 +728,7 @@ static SCM post_in(SCM request, int sock) {
 	}
 
 static void process_request(RFRAME *frame) {
-	char buf[1024];
+	char buf[4096];
 	size_t avail;
 	char *pt, *colon, *status, *body;
 	int sock, res;
