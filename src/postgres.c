@@ -37,6 +37,7 @@ struct pg_res {
 	int nfields;
 	int tuples;
 	int cmd_tuples;
+	int status;
 	SCM types;
 	SCM fields;
 	};
@@ -96,6 +97,7 @@ static SCM pg_exec(SCM conn, SCM query) {
 	pgr->nfields = PQnfields(pgr->res);
 	pgr->tuples = PQntuples(pgr->res);
 	pgr->cmd_tuples = atoi(PQcmdTuples(pgr->res));
+	pgr->status = PQresultStatus(pgr->res);
 	for (i = pgr->nfields - 1; i >= 0; i--) {
 		pgr->fields = scm_cons(scm_from_utf8_symbol(
 			PQfname(pgr->res, i)), pgr->fields);
@@ -104,6 +106,15 @@ static SCM pg_exec(SCM conn, SCM query) {
 		}
 	SCM_NEWSMOB(res_smob, pg_res_tag, pgr);
 	return res_smob;
+	}
+
+static SCM pg_error_msg(SCM res) {
+	struct pg_res *pgr;
+	scm_assert_smob_type(pg_res_tag, res);
+	pgr = (struct pg_res *)SCM_SMOB_DATA(res);
+	if ((pgr->status != PGRES_FATAL_ERROR) &&
+			(pgr->status != PGRES_NONFATAL_ERROR)) return SCM_BOOL_F;
+	return c2s(PQresultErrorMessage(pgr->res));
 	}
 
 static SCM decode_timestamp(const char *string) {
@@ -399,6 +410,7 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-end-stream?", 1, 0, 0, pg_done);
 	scm_c_define_gsubr("pg-format", 2, 0, 0, pg_format_sql);
 	scm_c_define_gsubr("pg-cell", 2, 0, 0, pg_cell);
+	scm_c_define_gsubr("pg-error-msg", 1, 0, 0, pg_error_msg);
 	scm_c_define_gsubr("decode-ts", 1, 0, 0, decode_ts);
 	}
 	
