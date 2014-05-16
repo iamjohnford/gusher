@@ -23,6 +23,7 @@ AC_CHECK_LIB([xml2], [xmlReadMemory])
 AC_CHECK_LIB([readline], [readline])
 AC_CHECK_LIB([kyotocabinet], [kcdbopen])
 AC_CHECK_LIB([gcrypt], [gcry_md_hash_buffer])
+AC_CHECK_LIB([gc], [GC_malloc])
 
 # Checks for header files.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netdb.h netinet/in.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])
