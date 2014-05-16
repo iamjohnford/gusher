@@ -38,6 +38,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <poll.h>
+#include <zmq.h>
 
 #include "postgres.h"
 #include "gtime.h"
@@ -48,13 +49,14 @@
 #include "log.h"
 #include "http.h"
 #include "butter.h"
+#include "messaging.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
 #define DEFAULT_PORT 8080
 #define BOOT_FILE "boot.scm"
 #define COOKIE_KEY "GUSHERID"
 #define DEFAULT_MAX_THREADS 32
-#define POLL_TIMEOUT 3000
+#define POLL_TIMEOUT 2000
 #define POLICE_INTVL 6
 #define POST_MEM_MAX 1000000
 #define DEFAULT_GUSHER_ROOT "/var/lib/gusher"
@@ -958,6 +960,7 @@ static void init_env(void) {
 	pats[sizeof(pats) - 1] = '\0';
 	regcomp(&cookie_pat, pats, REG_EXTENDED);
 	init_log();
+	init_messaging();
 	init_postgres();
 	init_time();
 	init_cache();
@@ -999,6 +1002,7 @@ static void shutdown_env(void) {
 	shutdown_inotify();
 	shutdown_http();
 	shutdown_time();
+	shutdown_messaging();
 	shutdown_log();
 	}
 
@@ -1137,7 +1141,8 @@ static void police() {
 	}
 
 int main(int argc, char **argv) {
-	struct pollfd polls[3];
+	//struct pollfd polls[3];
+	zmq_pollitem_t polls[3];
 	int opt, sock;
 	int fdin, nfds;
 	int http_port;
@@ -1187,10 +1192,13 @@ int main(int argc, char **argv) {
 		optind++;
 		}
 	fdin = fileno(stdin);
+	polls[0].socket = NULL;
 	polls[0].fd = sock;
 	polls[0].events = POLLIN;
+	polls[1].socket = NULL;
 	polls[1].fd = inotify_fd;
 	polls[1].events = POLLIN;
+	polls[2].socket = NULL;
 	polls[2].fd = fdin;
 	polls[2].events = POLLIN;
 	running = 1;
@@ -1209,7 +1217,8 @@ int main(int argc, char **argv) {
 			mark += POLICE_INTVL;
 			police();
 			}
-		if (poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
+		//if (poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
+		if (zmq_poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
 		//if (running == 0) break; // why?
 		if (polls[0].revents & POLLIN) process_http(sock);
 		if (polls[1].revents & POLLIN) process_inotify_events();

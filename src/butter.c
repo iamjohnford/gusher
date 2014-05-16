@@ -43,7 +43,7 @@ static SCM sha256_sum(SCM src) {
 	return scm_take_locale_string(hex);
 	}
 
-static SCM to_s(SCM obj) {
+SCM to_s(SCM obj) {
 	if (scm_is_string(obj)) return obj;
 	if (scm_is_number(obj)) return scm_number_to_string(obj, radix10);
 	if (scm_is_symbol(obj)) return scm_symbol_to_string(obj);
