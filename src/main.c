@@ -933,7 +933,7 @@ static void add_thread() {
 	}
 
 static void init_env(void) {
-	char *here, pats[64];
+	char *here, pats[64], *ver;
 	struct stat bstat;
 	scm_permanent_object(radix10 = scm_from_int(10));
 	scm_c_define_gsubr("http", 2, 0, 0, set_handler);
@@ -960,6 +960,9 @@ static void init_env(void) {
 	pats[sizeof(pats) - 1] = '\0';
 	regcomp(&cookie_pat, pats, REG_EXTENDED);
 	init_log();
+	ver = scm_to_locale_string(scm_version());
+	log_msg("Guile version %s\n", ver);
+	free(ver);
 	init_messaging();
 	init_postgres();
 	init_time();
