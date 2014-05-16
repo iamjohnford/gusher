@@ -23,6 +23,7 @@ AC_CHECK_LIB([xml2], [xmlReadMemory])
 AC_CHECK_LIB([readline], [readline])
 AC_CHECK_LIB([kyotocabinet], [kcdbopen])
 AC_CHECK_LIB([gcrypt], [gcry_md_hash_buffer])
+AC_CHECK_LIB([gc], [GC_malloc])
 AC_CHECK_LIB([zmq], [zmq_ctx_new])
 
 # Checks for header files.
