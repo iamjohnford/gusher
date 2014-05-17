@@ -17,4 +17,5 @@
 */
 
 void init_messaging(void);
+void msg_poll(void);
 void shutdown_messaging(void);

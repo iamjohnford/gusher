@@ -1221,6 +1221,7 @@ int main(int argc, char **argv) {
 			police();
 			}
 		//if (poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
+		msg_poll();
 		if (zmq_poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
 		//if (running == 0) break; // why?
 		if (polls[0].revents & POLLIN) process_http(sock);
