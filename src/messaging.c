@@ -35,6 +35,7 @@ typedef struct sock_node {
 	} SOCK_NODE;
 
 static void *ctx = NULL;
+static SCM touch_msg;
 static SOCK_NODE *responders[MAX_POLL_ITEMS];
 static int poll_dirty = 0;
 static int poll_items = 0;
@@ -78,6 +79,7 @@ static SCM msg_publish(SCM sock, SCM msg) {
 	SCM enc;
 	char *buf;
 	node = (SOCK_NODE *)SCM_SMOB_DATA(sock);
+	if (msg == SCM_UNDEFINED) msg = touch_msg;
 	enc = json_encode(msg);
 	if (enc == SCM_BOOL_F) enc = to_s(msg);
 	buf = scm_to_utf8_string(enc);
@@ -114,8 +116,16 @@ void init_messaging() {
 	sock_node_tag = scm_make_smob_type("sock-node", sizeof(SOCK_NODE));
 	zmq_version(&major, &minor, &patch);
 	log_msg("ZeroMQ version %d.%d.%d\n", major, minor, patch);
+	touch_msg =
+		scm_cons(
+			scm_cons(
+				scm_from_utf8_symbol("touch"),
+				scm_from_utf8_string("touch")),
+			SCM_EOL
+			);
+	scm_gc_protect_object(touch_msg);
 	scm_c_define_gsubr("msg-publisher", 1, 0, 0, msg_publisher);
-	scm_c_define_gsubr("msg-publish", 2, 0, 0, msg_publish);
+	scm_c_define_gsubr("msg-publish", 1, 1, 0, msg_publish);
 	scm_c_define_gsubr("msg-subscribe", 2, 0, 0, msg_subscribe);
 	return;
 	}
@@ -138,6 +148,7 @@ void msg_process(int start, int finish, zmq_pollitem_t polls[]) {
 				}
 		zmq_msg_close(&msg);
 		}
+	return;
 	}
 
 int msg_poll_collect(int start, zmq_pollitem_t polls[]) {
@@ -171,4 +182,5 @@ void shutdown_messaging() {
 		zmq_ctx_destroy(&ctx);
 		ctx = NULL;
 		}
+	return;
 	}
