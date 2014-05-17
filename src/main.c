@@ -37,7 +37,6 @@
 #include <regex.h>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include <poll.h>
 #include <zmq.h>
 
 #include "postgres.h"
@@ -1144,10 +1143,9 @@ static void police() {
 	}
 
 int main(int argc, char **argv) {
-	//struct pollfd polls[3];
-	zmq_pollitem_t polls[3];
-	int opt, sock;
-	int fdin, nfds;
+	zmq_pollitem_t polls[MAX_POLL_ITEMS];
+	int opt, http_sock;
+	int fdin, nfds, poll_items;
 	int http_port;
 	int background;
 	time_t mark;
@@ -1185,8 +1183,8 @@ int main(int argc, char **argv) {
 	if (strlen(gusher_root) == 0) {
 		strcpy(gusher_root, DEFAULT_GUSHER_ROOT);
 		}
-	sock = http_socket(http_port);
-	if (sock < 0) exit(1);
+	http_sock = http_socket(http_port);
+	if (http_sock < 0) exit(1);
 	scm_init_guile();
 	init_env();
 	while (optind < argc) {
@@ -1196,14 +1194,14 @@ int main(int argc, char **argv) {
 		}
 	fdin = fileno(stdin);
 	polls[0].socket = NULL;
-	polls[0].fd = sock;
-	polls[0].events = POLLIN;
+	polls[0].fd = http_sock;
+	polls[0].events = ZMQ_POLLIN;
 	polls[1].socket = NULL;
 	polls[1].fd = inotify_fd;
-	polls[1].events = POLLIN;
+	polls[1].events = ZMQ_POLLIN;
 	polls[2].socket = NULL;
 	polls[2].fd = fdin;
-	polls[2].events = POLLIN;
+	polls[2].events = ZMQ_POLLIN;
 	running = 1;
 	if (isatty(fdin))
 		rl_callback_handler_install(prompt, line_handler);
@@ -1220,16 +1218,16 @@ int main(int argc, char **argv) {
 			mark += POLICE_INTVL;
 			police();
 			}
-		//if (poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
-		msg_poll();
-		if (zmq_poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
+		poll_items = msg_poll_collect(nfds, polls);
+		if (zmq_poll(polls, poll_items, POLL_TIMEOUT) < 1) continue;
 		//if (running == 0) break; // why?
-		if (polls[0].revents & POLLIN) process_http(sock);
-		if (polls[1].revents & POLLIN) process_inotify_events();
-		if (polls[2].revents & POLLIN) process_line(fdin);
+		if (polls[0].revents & ZMQ_POLLIN) process_http(http_sock);
+		if (polls[1].revents & ZMQ_POLLIN) process_inotify_events();
+		if (polls[2].revents & ZMQ_POLLIN) process_line(fdin);
+		msg_process(nfds, poll_items, polls);
 		}
 	log_msg("bye!\n");
-	close(sock);
+	close(http_sock);
 	shutdown_env();
 	return 0;
 	} 

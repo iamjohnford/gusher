@@ -19,11 +19,13 @@
 #include <stdio.h>
 #include <libguile.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <zmq.h>
 
 #include "log.h"
 #include "json.h"
 #include "butter.h"
+#include "messaging.h"
 
 typedef struct sock_node {
 	void *msg_sock;
@@ -33,6 +35,9 @@ typedef struct sock_node {
 	} SOCK_NODE;
 
 static void *ctx = NULL;
+static SOCK_NODE *responders[MAX_POLL_ITEMS];
+static int poll_dirty = 0;
+static int poll_items = 0;
 extern char gusher_root[];
 static char signals_root[PATH_MAX];
 //static zmq_pollitem_t *lsocks = NULL;
@@ -96,6 +101,7 @@ static SCM msg_subscribe(SCM endpoint, SCM responder) {
 	get_sockpath(endpoint, sockpath, sizeof(sockpath));
 	scm_remember_upto_here_1(endpoint);
 	zmq_connect(node->msg_sock, sockpath);
+	poll_dirty = 1;
 	return SCM_UNSPECIFIED;
 	}
 
@@ -114,31 +120,44 @@ void init_messaging() {
 	return;
 	}
 
-void msg_poll() {
+void msg_process(int start, int finish, zmq_pollitem_t polls[]) {
+	int i, rc;
 	SOCK_NODE *node;
 	zmq_msg_t msg;
-	int rc, err;
+	for (i = start; i < finish; i++) {
+		if ((polls[i].revents & ZMQ_POLLIN) == 0) continue;
+		node = responders[i - start];
+		zmq_msg_init(&msg);
+		rc = zmq_msg_recv(&msg, node->msg_sock, 0);
+		if (rc < 0) log_msg("MSG ERR: %d\n", zmq_errno());
+		else {
+				size_t msg_size = zmq_msg_size(&msg);
+				void *msg_data = zmq_msg_data(&msg);
+				scm_call_1(node->responder,
+					json_decode(scm_from_utf8_stringn(msg_data, msg_size)));
+				}
+		zmq_msg_close(&msg);
+		}
+	}
+
+int msg_poll_collect(int start, zmq_pollitem_t polls[]) {
+	if (!poll_dirty) return start + poll_items;
+	SOCK_NODE *node;
+	poll_items = 0;
 	node = sock_nodes;
 	while (node != NULL) {
 		if (node->poll) {
-			zmq_msg_init(&msg);
-			rc = zmq_msg_recv(&msg, node->msg_sock, ZMQ_DONTWAIT);
-			if (rc < 0) {
-				if ((err = zmq_errno()) != EAGAIN) {
-					log_msg("MSG ERR: %d\n", err);
-					}
-				}
-			else {
-					size_t msg_size = zmq_msg_size(&msg);
-					void *msg_data = zmq_msg_data(&msg);
-					scm_call_1(node->responder,
-						json_decode(scm_from_utf8_stringn(msg_data, msg_size)));
-					}
-			zmq_msg_close(&msg);
+			polls[start].socket = node->msg_sock;
+			polls[start].fd = poll_items;
+			responders[poll_items] = node;
+			polls[start].events = ZMQ_POLLIN;
+			start += 1;
+			poll_items += 1;
 			}
 		node = node->link;
 		}
-	return;
+	poll_dirty = 0;
+	return start;
 	}
 
 void shutdown_messaging() {
