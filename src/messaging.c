@@ -33,24 +33,37 @@ typedef struct sock_node {
 	} SOCK_NODE;
 
 static void *ctx = NULL;
+extern char gusher_root[];
+static char signals_root[PATH_MAX];
 //static zmq_pollitem_t *lsocks = NULL;
 //static int nlsocks = 0;
 static scm_t_bits sock_node_tag;
 static SOCK_NODE *sock_nodes = NULL;
 
+static char *get_sockpath(SCM signal, char *buf, int len) {
+	char *sname;
+	sname = scm_to_locale_string(scm_symbol_to_string(signal));
+	snprintf(buf, len - 1, "ipc://%s/%s.zmq", signals_root, sname);
+	buf[len - 1] = '\0';
+	free(sname);
+	return buf;
+	}
+
 static SCM msg_publisher(SCM endpoint) {
 	SOCK_NODE *node;
 	SCM smob;
+	char sockpath[PATH_MAX];
 	node = (SOCK_NODE *)scm_gc_malloc(sizeof(SOCK_NODE), "sock-node");
 	node->msg_sock = zmq_socket(ctx, ZMQ_PUB);
 	node->poll = 0;
 	node->responder = SCM_BOOL_F;
 	node->link = sock_nodes;
 	sock_nodes = node;
-	char *sep = scm_to_locale_string(endpoint);
+	get_sockpath(endpoint, sockpath, sizeof(sockpath));
 	scm_remember_upto_here_1(endpoint);
-	zmq_bind(node->msg_sock, sep);
-	free(sep);
+	zmq_bind(node->msg_sock, sockpath);
+	char *fp = index(sockpath, '/') + 2;
+	chmod(fp, 0660);
 	SCM_NEWSMOB(smob, sock_node_tag, node);
 	return smob;
 	}
@@ -72,6 +85,7 @@ static SCM msg_publish(SCM sock, SCM msg) {
 
 static SCM msg_subscribe(SCM endpoint, SCM responder) {
 	SOCK_NODE *node;
+	char sockpath[PATH_MAX];
 	node = (SOCK_NODE *)scm_gc_malloc(sizeof(SOCK_NODE), "sock-node");
 	node->msg_sock = zmq_socket(ctx, ZMQ_SUB);
 	zmq_setsockopt(node->msg_sock, ZMQ_SUBSCRIBE, NULL, 0);
@@ -79,14 +93,17 @@ static SCM msg_subscribe(SCM endpoint, SCM responder) {
 	node->responder = responder;
 	node->link = sock_nodes;
 	sock_nodes = node;
-	char *ep = scm_to_locale_string(endpoint);
-	zmq_connect(node->msg_sock, ep);
-	free(ep);
+	get_sockpath(endpoint, sockpath, sizeof(sockpath));
+	scm_remember_upto_here_1(endpoint);
+	zmq_connect(node->msg_sock, sockpath);
 	return SCM_UNSPECIFIED;
 	}
 
 void init_messaging() {
 	int major, minor, patch;
+	snprintf(signals_root, sizeof(signals_root) - 1,
+				"%s/signals", gusher_root);
+	signals_root[sizeof(signals_root) - 1] = '\0';
 	ctx = zmq_ctx_new();
 	sock_node_tag = scm_make_smob_type("sock-node", sizeof(SOCK_NODE));
 	zmq_version(&major, &minor, &patch);
