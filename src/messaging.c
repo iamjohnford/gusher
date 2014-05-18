@@ -104,6 +104,7 @@ static SCM msg_subscribe(SCM endpoint, SCM responder) {
 	scm_remember_upto_here_1(endpoint);
 	zmq_connect(node->msg_sock, sockpath);
 	poll_dirty = 1;
+	log_msg("subscribe %s\n", sockpath);
 	return SCM_UNSPECIFIED;
 	}
 
