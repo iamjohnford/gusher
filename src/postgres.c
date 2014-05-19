@@ -412,5 +412,8 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-cell", 2, 0, 0, pg_cell);
 	scm_c_define_gsubr("pg-error-msg", 1, 0, 0, pg_error_msg);
 	scm_c_define_gsubr("decode-ts", 1, 0, 0, decode_ts);
+	int vers = PQlibVersion();
+	log_msg("PQlib version %d.%d.%d\n", vers / 10000,
+				(vers / 100) % 100, vers % 100);
 	}
 	

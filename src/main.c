@@ -37,7 +37,7 @@
 #include <regex.h>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include <poll.h>
+#include <zmq.h>
 
 #include "postgres.h"
 #include "gtime.h"
@@ -48,13 +48,14 @@
 #include "log.h"
 #include "http.h"
 #include "butter.h"
+#include "messaging.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
 #define DEFAULT_PORT 8080
 #define BOOT_FILE "boot.scm"
 #define COOKIE_KEY "GUSHERID"
 #define DEFAULT_MAX_THREADS 32
-#define POLL_TIMEOUT 3000
+#define POLL_TIMEOUT 2000
 #define POLICE_INTVL 6
 #define POST_MEM_MAX 1000000
 #define DEFAULT_GUSHER_ROOT "/var/lib/gusher"
@@ -931,7 +932,7 @@ static void add_thread() {
 	}
 
 static void init_env(void) {
-	char *here, pats[64];
+	char *here, pats[64], *ver;
 	struct stat bstat;
 	scm_permanent_object(radix10 = scm_from_int(10));
 	scm_c_define_gsubr("http", 2, 0, 0, set_handler);
@@ -958,6 +959,10 @@ static void init_env(void) {
 	pats[sizeof(pats) - 1] = '\0';
 	regcomp(&cookie_pat, pats, REG_EXTENDED);
 	init_log();
+	ver = scm_to_locale_string(scm_version());
+	log_msg("Guile version %s\n", ver);
+	free(ver);
+	init_messaging();
 	init_postgres();
 	init_time();
 	init_cache();
@@ -999,6 +1004,7 @@ static void shutdown_env(void) {
 	shutdown_inotify();
 	shutdown_http();
 	shutdown_time();
+	shutdown_messaging();
 	shutdown_log();
 	}
 
@@ -1137,9 +1143,9 @@ static void police() {
 	}
 
 int main(int argc, char **argv) {
-	struct pollfd polls[3];
-	int opt, sock;
-	int fdin, nfds;
+	zmq_pollitem_t polls[MAX_POLL_ITEMS];
+	int opt, http_sock;
+	int fdin, nfds, poll_items;
 	int http_port;
 	int background;
 	time_t mark;
@@ -1177,8 +1183,8 @@ int main(int argc, char **argv) {
 	if (strlen(gusher_root) == 0) {
 		strcpy(gusher_root, DEFAULT_GUSHER_ROOT);
 		}
-	sock = http_socket(http_port);
-	if (sock < 0) exit(1);
+	http_sock = http_socket(http_port);
+	if (http_sock < 0) exit(1);
 	scm_init_guile();
 	init_env();
 	while (optind < argc) {
@@ -1187,12 +1193,15 @@ int main(int argc, char **argv) {
 		optind++;
 		}
 	fdin = fileno(stdin);
-	polls[0].fd = sock;
-	polls[0].events = POLLIN;
+	polls[0].socket = NULL;
+	polls[0].fd = http_sock;
+	polls[0].events = ZMQ_POLLIN;
+	polls[1].socket = NULL;
 	polls[1].fd = inotify_fd;
-	polls[1].events = POLLIN;
+	polls[1].events = ZMQ_POLLIN;
+	polls[2].socket = NULL;
 	polls[2].fd = fdin;
-	polls[2].events = POLLIN;
+	polls[2].events = ZMQ_POLLIN;
 	running = 1;
 	if (isatty(fdin))
 		rl_callback_handler_install(prompt, line_handler);
@@ -1209,14 +1218,16 @@ int main(int argc, char **argv) {
 			mark += POLICE_INTVL;
 			police();
 			}
-		if (poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
+		poll_items = msg_poll_collect(nfds, polls);
+		if (zmq_poll(polls, poll_items, POLL_TIMEOUT) < 1) continue;
 		//if (running == 0) break; // why?
-		if (polls[0].revents & POLLIN) process_http(sock);
-		if (polls[1].revents & POLLIN) process_inotify_events();
-		if (polls[2].revents & POLLIN) process_line(fdin);
+		if (polls[0].revents & ZMQ_POLLIN) process_http(http_sock);
+		if (polls[1].revents & ZMQ_POLLIN) process_inotify_events();
+		if (polls[2].revents & ZMQ_POLLIN) process_line(fdin);
+		msg_process(nfds, poll_items, polls);
 		}
 	log_msg("bye!\n");
-	close(sock);
+	close(http_sock);
 	shutdown_env();
 	return 0;
 	} 

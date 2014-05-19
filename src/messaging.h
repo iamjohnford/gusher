@@ -16,6 +16,11 @@
 ** Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 */
 
-void init_butter(void);
-SCM safe_from_utf8(const char *);
-SCM to_s(SCM obj);
+#include <zmq.h>
+
+#define MAX_POLL_ITEMS 256
+
+void init_messaging(void);
+int msg_poll_collect(int, zmq_pollitem_t[]);
+void msg_process(int, int, zmq_pollitem_t[]);
+void shutdown_messaging(void);
