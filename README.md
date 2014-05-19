@@ -7,8 +7,8 @@ GNU [Guile](http://www.gnu.org/software/guile/) extension environment
 to host applications written in
 [Scheme](https://en.wikipedia.org/wiki/Scheme_%28programming_language%29).
 Each gusher web application runs as a free-standing web server,
-but will typically 
-be proxied by a general-purpose web server such as apache or nginx.
+though will typically 
+be fronted by a general-purpose web server such as apache or nginx.
 Features include:
 
 - basic [postgresql](http://www.postgresql.org/) interface for SQL
@@ -34,8 +34,8 @@ auto-refreshes cached items in response to changes in their dependencies
 - fast, simple templating facility, for composing HTML, complex
 SQL queries, anything that can be represented as a template
 
-- low-level, asynchronous intra- and inter-process signaling, for
-event-driven operation (linux kernel's "inotify")
+- asynchronous intra- and inter-application publish-subscribe messaging
+via [0MQ](http://zeromq.org/)
 
 - command line editing and history (libreadline) for interactive
 Scheme coding
