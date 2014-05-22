@@ -44,7 +44,6 @@
 #include "cache.h"
 #include "json.h"
 #include "template.h"
-#include "gnotify.h"
 #include "log.h"
 #include "http.h"
 #include "butter.h"
@@ -968,7 +967,6 @@ static void init_env(void) {
 	init_cache();
 	init_json();
 	init_template();
-	init_inotify();
 	init_http();
 	init_butter();
 	here = getcwd(NULL, 0);
@@ -1001,7 +999,6 @@ static void shutdown_env(void) {
 	regfree(&cookie_pat);
 	clear_queues();
 	shutdown_cache();
-	shutdown_inotify();
 	shutdown_http();
 	shutdown_time();
 	shutdown_messaging();
@@ -1197,11 +1194,8 @@ int main(int argc, char **argv) {
 	polls[0].fd = http_sock;
 	polls[0].events = ZMQ_POLLIN;
 	polls[1].socket = NULL;
-	polls[1].fd = inotify_fd;
+	polls[1].fd = fdin;
 	polls[1].events = ZMQ_POLLIN;
-	polls[2].socket = NULL;
-	polls[2].fd = fdin;
-	polls[2].events = ZMQ_POLLIN;
 	running = 1;
 	if (isatty(fdin))
 		rl_callback_handler_install(prompt, line_handler);
@@ -1211,7 +1205,7 @@ int main(int argc, char **argv) {
 		n = sysconf(_SC_NPROCESSORS_ONLN);
 		while (n-- > 0) add_thread();
 		}
-	nfds = (background ? 2 : 3);
+	nfds = (background ? 1 : 2);
 	mark = time(NULL) + POLICE_INTVL;
 	while (running) {  
 		if (time(NULL) >= mark) {
@@ -1222,8 +1216,7 @@ int main(int argc, char **argv) {
 		if (zmq_poll(polls, poll_items, POLL_TIMEOUT) < 1) continue;
 		//if (running == 0) break; // why?
 		if (polls[0].revents & ZMQ_POLLIN) process_http(http_sock);
-		if (polls[1].revents & ZMQ_POLLIN) process_inotify_events();
-		if (polls[2].revents & ZMQ_POLLIN) process_line(fdin);
+		if (polls[1].revents & ZMQ_POLLIN) process_line(fdin);
 		msg_process(nfds, poll_items, polls);
 		}
 	log_msg("bye!\n");

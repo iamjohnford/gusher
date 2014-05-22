@@ -29,7 +29,6 @@
 #include <errno.h>
 #include <kclangc.h>
 
-#include "gnotify.h"
 #include "log.h"
 #include "json.h"
 
@@ -336,27 +335,6 @@ static SCM kv_del(SCM db, SCM key) {
 	return (res ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
-/*
-static SCM edit_watch_handler(SCM path, SCM mask) {
-	char *spath;
-	spath = scm_to_locale_string(path);
-	scm_lock_mutex(redis_mutex);
-	send_header("HDEL", 2);
-	send_arg(FILE_CACHE);
-	send_arg(spath);
-	getrline(NULL);
-	free(spath);
-	scm_unlock_mutex(redis_mutex);
-	return SCM_BOOL_T;
-	}
-
-static SCM watch_edit(SCM dir) {
-	if (redis_sock < 0) return SCM_BOOL_F;
-	return add_watch(dir, scm_from_uint32(IN_CLOSE_WRITE),
-		scm_c_make_gsubr("edit_watch_handler", 2, 0, 0, edit_watch_handler));
-	}
-*/
-
 void police_cache(void) {
 	FILE_NODE *node;
 	struct stat nstat;
@@ -497,5 +475,4 @@ void init_cache(void) {
 	scm_c_define_gsubr("session-read", 1, 0, 0, session_read);
 	scm_c_define_gsubr("session-get", 2, 0, 0, session_get);
 	scm_c_define_gsubr("session-set", 3, 0, 0, session_set);
-//	scm_c_define_gsubr("watch-edit", 1, 0, 0, watch_edit);
 	}
