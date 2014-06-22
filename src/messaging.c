@@ -67,7 +67,7 @@ static SCM msg_publisher(SCM endpoint) {
 	sock_nodes = node;
 	get_sockpath(endpoint, sockpath, sizeof(sockpath));
 	scm_remember_upto_here_1(endpoint);
-	zmq_bind(node->msg_sock, sockpath);
+	zmq_connect(node->msg_sock, sockpath);
 	char *fp = index(sockpath, '/') + 2;
 	chmod(fp, 0660);
 	SCM_NEWSMOB(smob, sock_node_tag, node);
@@ -93,6 +93,7 @@ static SCM msg_publish(SCM sock, SCM msg) {
 static SCM msg_subscribe(SCM endpoint, SCM responder) {
 	SOCK_NODE *node;
 	char sockpath[PATH_MAX];
+	int rc;
 	node = (SOCK_NODE *)scm_gc_malloc(sizeof(SOCK_NODE), "sock-node");
 	node->msg_sock = zmq_socket(ctx, ZMQ_SUB);
 	zmq_setsockopt(node->msg_sock, ZMQ_SUBSCRIBE, NULL, 0);
@@ -102,9 +103,12 @@ static SCM msg_subscribe(SCM endpoint, SCM responder) {
 	sock_nodes = node;
 	get_sockpath(endpoint, sockpath, sizeof(sockpath));
 	scm_remember_upto_here_1(endpoint);
-	zmq_connect(node->msg_sock, sockpath);
+	rc = zmq_bind(node->msg_sock, sockpath);
+	if (rc != 0) {
+		log_msg("zmq_bind to %s failed: %s\n", sockpath, strerror(errno));
+		}
+	else log_msg("subscribe %s\n", sockpath);
 	poll_dirty = 1;
-	log_msg("subscribe %s\n", sockpath);
 	return SCM_UNSPECIFIED;
 	}
 
