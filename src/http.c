@@ -306,7 +306,7 @@ static SCM http_url_encode(SCM src) {
 	return scm_from_locale_string("");
 	}
 
-static SCM http_get(SCM url, SCM args) {
+static SCM http_get_master(SCM url, SCM args, int raw) {
 	HNODE *hnode;
 	CURL *handle;
 	char *surl, errbuf[CURL_ERROR_SIZE], *bag, *pt, *userpwd, *post_str;
@@ -368,11 +368,20 @@ static SCM http_get(SCM url, SCM args) {
 		}
 	body = scm_from_utf8_stringn(bag, tsize);
 	free(bag);
-	reply = scm_cons(headers, process_body(headers, body));
+	if (raw) reply = scm_cons(headers, body);
+	else reply = scm_cons(headers, process_body(headers, body));
 	scm_remember_upto_here_2(headers, url);
 	scm_remember_upto_here_2(body, reply);
 	scm_remember_upto_here_1(args);
 	return reply;
+	}
+
+static SCM http_get(SCM url, SCM args) {
+	return http_get_master(url, args, 0);
+	}
+
+static SCM http_get_raw(SCM url, SCM args) {
+	return http_get_master(url, args, 1);
 	}
 
 static SCM xml_node_name(SCM xml_doc) {
@@ -393,6 +402,7 @@ void init_http() {
 	scm_gc_protect_object(infix);
 	scm_gc_protect_object(mutex = scm_make_mutex());
 	scm_c_define_gsubr("http-get", 1, 0, 1, http_get);
+	scm_c_define_gsubr("http-get-raw", 1, 0, 1, http_get_raw);
 	scm_c_define_gsubr("http-req", 1, 0, 1, http_get);
 	scm_c_define_gsubr("http-url-encode", 1, 0, 0, http_url_encode);
 	scm_c_define_gsubr("xml-node-name", 1, 0, 0, xml_node_name);
