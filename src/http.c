@@ -128,6 +128,7 @@ static SCM trim_cat(SCM list) {
 	char *buf, *pt;
 	int trimmed;
 	joined = scm_string_join(list, scm_from_string(""), infix);
+	scm_remember_upto_here_1(list);
 	trimmed = 0;
 	buf = scm_to_utf8_string(joined);
 	pt = buf + strlen(buf) - 1;
@@ -138,7 +139,7 @@ static SCM trim_cat(SCM list) {
 	for (pt = buf; *pt && isspace(*pt); pt++) trimmed = 1;
 	joined = scm_from_string(trimmed ? pt : buf);
 	free(buf);
-	scm_remember_upto_here_2(joined, list);
+	scm_remember_upto_here_1(joined);
 	return joined;
 	}
 
@@ -192,6 +193,7 @@ static SCM parse_xml(SCM doc) {
 	xmlDoc *xmldoc;
 	xmlNode *root;
 	buf = scm_to_utf8_string(doc);
+	scm_remember_upto_here_1(doc);
 	xmldoc = xmlReadMemory(buf, strlen(buf), NULL, NULL,
 		XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
 	if (xmldoc == NULL) {
@@ -203,7 +205,7 @@ static SCM parse_xml(SCM doc) {
 	xmlFreeDoc(xmldoc);
 	xmlCleanupParser();
 	free(buf);
-	scm_remember_upto_here_2(tree, doc);
+	scm_remember_upto_here_1(tree);
 	return tree;
 	}
 
