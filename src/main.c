@@ -918,6 +918,22 @@ static SCM query_value_number(SCM request, SCM key) {
 	return scm_from_signed_integer(n);
 	}
 
+static SCM query_value_boolean(SCM request, SCM key) {
+	SCM string;
+	int state;
+	char *buf;
+	if ((string = query_value(request, key)) == SCM_BOOL_F)
+		return SCM_BOOL_F;
+	buf = scm_to_locale_string(string);
+	if (buf[0] == 'y') state = 1;
+	else if (buf[0] == 'Y') state = 1;
+	else if (buf[0] == 't') state = 1;
+	else if (buf[0] == 'T') state = 1;
+	else state = (atoi(buf) != 0);
+	free(buf);
+	return (state ? SCM_BOOL_T : SCM_BOOL_F);
+	}
+
 static void add_thread() {
 	SCM thread;
 	if (nthreads >= max_threads) return;
@@ -942,6 +958,7 @@ static void init_env(void) {
 	scm_c_define_gsubr("json-response", 1, 0, 0, json_http_response);
 	scm_c_define_gsubr("query-value", 2, 0, 0, query_value);
 	scm_c_define_gsubr("query-value-number", 2, 0, 0, query_value_number);
+	scm_c_define_gsubr("query-value-boolean", 2, 0, 0, query_value_boolean);
 	scm_permanent_object(query_sym = makesym("query"));
 	scm_permanent_object(method_sym = makesym("method"));
 	scm_permanent_object(ctype_sym = makesym("content-type"));
