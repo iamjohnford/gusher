@@ -24,7 +24,6 @@
 
 static SCM radix10;
 static SCM infix;
-static SCM string_cat_proc;
 
 static SCM sha256_sum(SCM src) {
 	int i;
@@ -100,7 +99,7 @@ static SCM string_cat(SCM glue, SCM items) {
 		else if (scm_is_symbol(item))
 			list = scm_cons(scm_symbol_to_string(item), list);
 		else if (scm_list_p(item) == SCM_BOOL_T)
-			list = scm_cons(scm_apply_1(string_cat_proc, glue, item), list);
+			list = scm_cons(string_cat(glue, item), list);
 		node = SCM_CDR(node);
 		}
 	cat = scm_string_join(scm_reverse(list), glue, infix);
@@ -126,6 +125,4 @@ void init_butter() {
 	scm_c_define_gsubr("to-f", 1, 0, 0, to_f);
 	scm_c_define_gsubr("string-cat", 1, 0, 1, string_cat);
 	scm_c_define_gsubr("sha-256-sum", 1, 0, 1, sha256_sum);
-	string_cat_proc = scm_c_eval_string("string-cat");
-	scm_gc_protect_object(string_cat_proc);
 	}
