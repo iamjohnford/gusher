@@ -29,51 +29,13 @@
 #define match(a,b) (strcmp(a,b) == 0)
 #define symbol(s) (scm_from_utf8_symbol(s))
 
-typedef struct hnode {
-	CURL *handle;
-	struct hnode *next;
-	} HNODE;
-
 typedef struct cnode {
 	struct cnode *next;
 	size_t size;
 	char content[];
 	} CNODE;
 
-static HNODE *hpool = NULL;
-static SCM mutex;
 static SCM infix;
-
-static HNODE *new_handle() {
-	HNODE *node;
-	node = (HNODE *)malloc(sizeof(HNODE));
-	node->handle = curl_easy_init();
-	node->next = NULL;
-	return node;
-	}
-
-static HNODE *get_handle() {
-	HNODE *node;
-	scm_lock_mutex(mutex);
-	if (hpool == NULL) {
-		node = new_handle();
-		scm_unlock_mutex(mutex);
-		return node;
-		}
-	node = hpool;
-	hpool = node->next;
-	node->next = NULL;
-	scm_unlock_mutex(mutex);
-	return node;
-	}
-
-static void release_handle(HNODE *node) {
-	scm_lock_mutex(mutex);
-	node->next = hpool;
-	hpool = node;
-	scm_unlock_mutex(mutex);
-	return;
-	}
 
 static size_t write_handler(void *buffer, size_t size,
 				size_t n, void *userp) {
@@ -295,35 +257,44 @@ static char *post_data(CURL *handle, SCM args) {
 	}
 
 static SCM http_url_encode(SCM src) {
-	HNODE *hnode;
 	if (scm_is_string(src)) {
-		char *ssrc, *enc;
-		ssrc = scm_to_utf8_string(src);
-		hnode = get_handle();
-		enc = curl_easy_escape(hnode->handle, ssrc, 0);
-		release_handle(hnode);
+		char *ssrc = scm_to_utf8_string(src);
+		SCM out;
+		CURL *handle = curl_easy_init();
+		if (handle != NULL) {
+			char *enc = curl_easy_escape(handle, ssrc, 0);
+			out = scm_take_locale_string(enc);
+			curl_easy_cleanup(handle);
+			}
+		else {
+			out = scm_from_locale_string("");
+			log_msg("http_url_encode: curl init failed\n");
+			}
 		free(ssrc);
-		return scm_take_locale_string(enc);
+		return out;
+		scm_remember_upto_here_1(out);
 		}
 	return scm_from_locale_string("");
 	}
 
 static SCM http_get_master(SCM url, SCM args, int raw) {
-	HNODE *hnode;
 	CURL *handle;
-	char *surl, errbuf[CURL_ERROR_SIZE], *bag, *pt, *userpwd, *post_str;
+	char errbuf[CURL_ERROR_SIZE], *bag, *pt, *userpwd, *post_str;
 	CURLcode res;
 	CNODE *chunks, *next;
 	long rescode;
 	size_t tsize;
-	SCM body, headers, reply;
-	hnode = get_handle();
-	handle = hnode->handle;
+	handle = curl_easy_init();
+	if (handle == NULL) {
+		log_msg("http_get: curl init failed\n");
+		return SCM_BOOL_F;
+		}
 	chunks = NULL;
 	userpwd = NULL;
 	post_str = NULL;
-	headers = SCM_EOL;
-	surl = scm_to_utf8_string(url);
+	SCM headers = SCM_EOL;
+	char *surl = scm_to_utf8_string(url);
+	scm_remember_upto_here_1(url);
 	curl_easy_setopt(handle, CURLOPT_URL, surl);
 	/*curl_easy_setopt(handle, CURLOPT_HEADER, 1);
 	curl_easy_setopt(handle, CURLOPT_VERBOSE, 1);*/
@@ -343,6 +314,7 @@ static SCM http_get_master(SCM url, SCM args, int raw) {
 		curl_easy_setopt(handle, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
 		curl_easy_setopt(handle, CURLOPT_USERPWD, userpwd);
 		}
+	scm_remember_upto_here_1(args);
 	res = curl_easy_perform(handle);
 	free(surl);
 	free(userpwd);
@@ -350,12 +322,12 @@ static SCM http_get_master(SCM url, SCM args, int raw) {
 	curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &rescode);
 	headers = scm_acons(symbol("status"), scm_from_int((int)rescode),
 				headers);
-	release_handle(hnode);
+	curl_easy_cleanup(handle);
 	if (res != 0) {
 		log_msg("http-get error: %s\n", errbuf);
 		return SCM_BOOL_F;
 		}
-	body = SCM_EOL;
+	SCM body = SCM_EOL;
 	tsize = 0;
 	for (next = chunks; next != NULL; next = next->next)
 		tsize += next->size;
@@ -370,12 +342,11 @@ static SCM http_get_master(SCM url, SCM args, int raw) {
 		}
 	body = scm_from_utf8_stringn(bag, tsize);
 	free(bag);
-	if (raw) reply = scm_cons(headers, body);
-	else reply = scm_cons(headers, process_body(headers, body));
-	scm_remember_upto_here_2(headers, url);
-	scm_remember_upto_here_2(body, reply);
-	scm_remember_upto_here_1(args);
+	SCM reply = scm_cons(headers, raw ? body : process_body(headers, body));
+	scm_remember_upto_here_1(headers);
+	scm_remember_upto_here_1(body);
 	return reply;
+	scm_remember_upto_here_1(reply);
 	}
 
 static SCM http_get(SCM url, SCM args) {
@@ -402,7 +373,6 @@ void init_http() {
 	curl_global_init(CURL_GLOBAL_ALL);
 	infix = symbol("infix");
 	scm_gc_protect_object(infix);
-	scm_gc_protect_object(mutex = scm_make_mutex());
 	scm_c_define_gsubr("http-get", 1, 0, 1, http_get);
 	scm_c_define_gsubr("http-get-raw", 1, 0, 1, http_get_raw);
 	scm_c_define_gsubr("http-req", 1, 0, 1, http_get);
@@ -414,13 +384,6 @@ void init_http() {
 	}
 
 void shutdown_http() {
-	HNODE *next;
-	while (hpool != NULL) {
-		next = hpool->next;
-		curl_easy_cleanup(hpool->handle);
-		free(hpool);
-		hpool = next;
-		}
 	curl_global_cleanup();
 	}
 
