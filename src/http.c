@@ -29,6 +29,10 @@
 #define match(a,b) (strcmp(a,b) == 0)
 #define symbol(s) (scm_from_utf8_symbol(s))
 
+typedef struct chandle {
+	CURL *handle;
+	} CHANDLE;
+
 typedef struct cnode {
 	struct cnode *next;
 	size_t size;
@@ -36,6 +40,8 @@ typedef struct cnode {
 	} CNODE;
 
 static SCM infix;
+static scm_t_bits chandle_tag;
+static CURL *encode_handle;
 
 static size_t write_handler(void *buffer, size_t size,
 				size_t n, void *userp) {
@@ -258,23 +264,42 @@ static char *post_data(CURL *handle, SCM args) {
 
 static SCM http_url_encode(SCM src) {
 	if (scm_is_string(src)) {
-		char *ssrc = scm_to_utf8_string(src);
 		SCM out;
-		CURL *handle = curl_easy_init();
-		if (handle != NULL) {
-			char *enc = curl_easy_escape(handle, ssrc, 0);
+		if (encode_handle != NULL) {
+			char *ssrc = scm_to_utf8_string(src);
+			char *enc = curl_easy_escape(encode_handle, ssrc, 0);
 			out = scm_take_locale_string(enc);
-			curl_easy_cleanup(handle);
+			free(ssrc);
 			}
 		else {
 			out = scm_from_locale_string("");
 			log_msg("http_url_encode: curl init failed\n");
 			}
-		free(ssrc);
 		return out;
 		scm_remember_upto_here_1(out);
 		}
 	return scm_from_locale_string("");
+	}
+
+static CURL *new_handle(const char *url) {
+	CURL *handle = curl_easy_init();
+	if (handle == NULL) return NULL;
+	curl_easy_setopt(handle, CURLOPT_URL, url);
+	curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1);
+	curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write_handler);
+	curl_easy_setopt(handle, CURLOPT_HEADERFUNCTION, header_handler);
+	curl_easy_setopt(handle, CURLOPT_POST, 0);
+	return handle;
+	}
+
+static SCM http_handle(SCM url) {
+	char *surl = scm_to_utf8_string(url);
+	scm_remember_upto_here_1(url);
+	CHANDLE *node = (CHANDLE *)scm_gc_malloc(sizeof(CHANDLE), "chandle");
+	node->handle = new_handle(surl);
+	free(surl);
+	if (node->handle == NULL) return SCM_BOOL_F;
+	SCM_RETURN_NEWSMOB(chandle_tag, node);
 	}
 
 static SCM http_get_master(SCM url, SCM args, int raw) {
@@ -283,25 +308,29 @@ static SCM http_get_master(SCM url, SCM args, int raw) {
 	CURLcode res;
 	CNODE *chunks, *next;
 	long rescode;
+	int local_handle;
 	size_t tsize;
-	handle = curl_easy_init();
-	if (handle == NULL) {
-		log_msg("http_get: curl init failed\n");
-		return SCM_BOOL_F;
+	if (SCM_SMOB_PREDICATE(chandle_tag, url)) {
+		local_handle = 0;
+		CHANDLE *obj = (CHANDLE *)SCM_SMOB_DATA(url);
+		handle = obj->handle;
 		}
+	else {
+		local_handle = 1;
+		char *surl = scm_to_utf8_string(url);
+		handle = new_handle(surl);
+		free(surl);
+		if (handle == NULL) {
+			log_msg("http_get: curl init failed\n");
+			return SCM_BOOL_F;
+			}
+		}
+	scm_remember_upto_here_1(url);
 	chunks = NULL;
 	userpwd = NULL;
 	post_str = NULL;
 	SCM headers = SCM_EOL;
-	char *surl = scm_to_utf8_string(url);
-	scm_remember_upto_here_1(url);
-	curl_easy_setopt(handle, CURLOPT_URL, surl);
-	/*curl_easy_setopt(handle, CURLOPT_HEADER, 1);
-	curl_easy_setopt(handle, CURLOPT_VERBOSE, 1);*/
-	curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1);
-	curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, write_handler);
 	curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&chunks);
-	curl_easy_setopt(handle, CURLOPT_HEADERFUNCTION, header_handler);
 	curl_easy_setopt(handle, CURLOPT_HEADERDATA, (void *)&headers);
 	curl_easy_setopt(handle, CURLOPT_ERRORBUFFER, errbuf);
 	if ((post_str = post_data(handle, args)) != NULL) {
@@ -316,13 +345,12 @@ static SCM http_get_master(SCM url, SCM args, int raw) {
 		}
 	scm_remember_upto_here_1(args);
 	res = curl_easy_perform(handle);
-	free(surl);
 	free(userpwd);
 	free(post_str);
 	curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &rescode);
 	headers = scm_acons(symbol("status"), scm_from_int((int)rescode),
 				headers);
-	curl_easy_cleanup(handle);
+	if (local_handle) curl_easy_cleanup(handle);
 	if (res != 0) {
 		log_msg("http-get error: %s\n", errbuf);
 		return SCM_BOOL_F;
@@ -369,10 +397,22 @@ static SCM xml_node_content(SCM xml_doc) {
 	return SCM_CAR(SCM_CDR(SCM_CDR(xml_doc)));
 	}
 
+static size_t free_chandle(SCM smob) {
+	CHANDLE *obj = (CHANDLE *)SCM_SMOB_DATA(smob);
+	if (obj->handle != NULL) {
+		curl_easy_cleanup(obj->handle);
+		obj->handle = NULL;
+		}
+	return 0;
+	}
+
 void init_http() {
 	curl_global_init(CURL_GLOBAL_ALL);
+	chandle_tag = scm_make_smob_type("chandle", sizeof(CHANDLE));
+	scm_set_smob_free(chandle_tag, free_chandle);
 	infix = symbol("infix");
 	scm_gc_protect_object(infix);
+	scm_c_define_gsubr("http-handle", 1, 0, 0, http_handle);
 	scm_c_define_gsubr("http-get", 1, 0, 1, http_get);
 	scm_c_define_gsubr("http-get-raw", 1, 0, 1, http_get_raw);
 	scm_c_define_gsubr("http-req", 1, 0, 1, http_get);
@@ -381,9 +421,11 @@ void init_http() {
 	scm_c_define_gsubr("xml-node-attrs", 1, 0, 0, xml_node_attrs);
 	scm_c_define_gsubr("xml-node-content", 1, 0, 0, xml_node_content);
 	scm_c_define_gsubr("xml-parse", 1, 0, 0, parse_xml);
+	encode_handle = curl_easy_init();
 	}
 
 void shutdown_http() {
+	if (encode_handle != NULL) curl_easy_cleanup(encode_handle);
 	curl_global_cleanup();
 	}
 
