@@ -232,7 +232,7 @@ static SCM time_epoch(SCM time) {
 	scm_assert_smob_type(time_tag, time);
 	gtime = (struct g_time *)SCM_SMOB_DATA(time);
 	scm_remember_upto_here_1(time);
-	return scm_from_int(gtime->epoch);
+	return scm_from_double(gtime->epoch + gtime->usec / 1000000.0);
 	}
 
 static SCM time_offset(SCM time) {
