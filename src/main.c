@@ -706,6 +706,7 @@ static SCM form_multipart(SCM request, int sock, char *ctype) {
 	return query;
 	}
 
+/*
 static void show_content_type(SCM request) {
 	SCM ctype = scm_assq_ref(request, ctype_sym);
 	char *type;
@@ -715,14 +716,14 @@ static void show_content_type(SCM request) {
 	free(type);
 	return;
 	}
-
+*/
 static SCM post_in(SCM request, int sock) {
 	SCM method = scm_assq_ref(request, method_sym);
 	if (method != post_sym) return SCM_BOOL_F;
 	SCM ctype = scm_assq_ref(request, ctype_sym);
 	if (ctype == SCM_BOOL_F) return SCM_BOOL_F;
 	char *type = scm_to_locale_string(ctype);
-	show_content_type(request);
+	//show_content_type(request);
 	if (strstr(type, "application/x-www-form-urlencoded") != NULL) {
 		free(type);
 		return form_urlencoded(request, sock);
