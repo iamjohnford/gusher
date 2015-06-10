@@ -66,6 +66,7 @@ static SCM stamp_sym;
 static FILE_NODE *file_nodes = NULL;
 static scm_t_bits make_node_tag;
 static scm_t_bits kvdb_node_tag;
+static int check_kv_root = 1;
 static SCM sessions_db;
 extern SCM session_sym;
 
@@ -382,30 +383,35 @@ void police_cache(void) {
 
 static SCM kv_open(SCM entry, SCM readonly) {
 	static char path[PATH_MAX];
-	char *sentry;
 	int err;
 	KVDB_NODE *node;
 	DB *db;
-	sentry = scm_to_locale_string(entry);
-	snprintf(path, sizeof(path) - 1, "%s/%s.db", KC_ROOT, sentry);
-	path[sizeof(path) - 1] = '\0';
+	if (check_kv_root) {
+		check_kv_root = 0;
+		struct stat sts;
+		if (stat(KC_ROOT, &sts) != 0) {
+			log_msg("please provision '%s' for key-value storage\n", KC_ROOT);
+			return SCM_BOOL_F;
+			}
+		}
 	err = db_create(&db, NULL, 0);
 	if (err != 0) {
 		log_msg("db_create: %d\n", err);
-		free(sentry);
 		return SCM_BOOL_F;
 		}
+	char *sentry = scm_to_locale_string(entry);
+	snprintf(path, sizeof(path) - 1, "%s/%s.db", KC_ROOT, sentry);
+	path[sizeof(path) - 1] = '\0';
+	free(sentry);
 	int flags = DB_THREAD;
 	if (readonly == SCM_BOOL_T) flags |= DB_RDONLY;
 	else flags |= DB_CREATE;
 	err = db->open(db, NULL, path, NULL, DB_HASH, flags, 0);
 	if (err != 0) {
 		log_msg("db_open '%s': %d\n", path, err);
-		free(sentry);
 		db->close(db, 0);
 		return SCM_BOOL_F;
 		}
-	free(sentry);
 	node = (KVDB_NODE *)scm_gc_malloc(sizeof(KVDB_NODE), "kvdb-node");
 	node->db = db;
 	node->path = (char *)malloc(strlen(path) + 1);
