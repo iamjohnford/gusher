@@ -27,7 +27,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <kclangc.h>
+#include <db.h>
 
 #include "log.h"
 #include "json.h"
@@ -37,7 +37,7 @@
 #define TYPE_DATUM 0
 #define TYPE_FILE 1
 #define TYPE_CHAIN 2
-#define KC_ROOT "/var/lib/gusher/kc"
+#define KC_ROOT "/var/lib/gusher/kv"
 
 typedef struct make_node {
 	SCM callback;
@@ -50,7 +50,7 @@ typedef struct make_node {
 	} MAKE_NODE;
 
 typedef struct kvdb_node {
-	KCDB *db;
+	DB *db;
 	char *path;
 	} KVDB_NODE;
 
@@ -67,8 +67,6 @@ static FILE_NODE *file_nodes = NULL;
 static scm_t_bits make_node_tag;
 static scm_t_bits kvdb_node_tag;
 static SCM sessions_db;
-static SCM kv_reader;
-static SCM kv_writer;
 extern SCM session_sym;
 
 static void invalidate(MAKE_NODE *node) {
@@ -253,86 +251,113 @@ inline char *symstr(SCM key) {
 	}
 
 static SCM kv_set(SCM db, SCM key, SCM value) {
-	int res;
+	int err;
 	char *skey, *sval;
+	DBT dbkey, dbval;
 	KVDB_NODE *node;
 	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
 	skey = symstr(key);
 	sval = scm_to_locale_string(value);
-	res = kcdbset(node->db, skey, strlen(skey), sval, strlen(sval));
+	memset(&dbkey, 0, sizeof(DBT));
+	dbkey.data = skey;
+	dbkey.size = strlen(skey);
+	memset(&dbval, 0, sizeof(DBT));
+	dbval.data = sval;
+	dbval.size = strlen(sval);
+	err = node->db->put(node->db, NULL, &dbkey, &dbval, 0);
 	free(skey);
 	free(sval);
-	return (res == 0 ? SCM_BOOL_F : SCM_BOOL_T);
+	return (err == 0 ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
 static SCM kv_get(SCM db, SCM key) {
-	int32_t vsiz;
-	char *skey, *value;
+	int err;
+	char *skey;
+	DBT dbkey, dbval;
 	KVDB_NODE *node;
+	SCM out;
 	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
 	skey = symstr(key);
-	vsiz = kcdbcheck(node->db, skey, strlen(skey));
-	if (vsiz < 0) {
-		free(skey);
-		return SCM_BOOL_F;
+	memset(&dbkey, 0, sizeof(DBT));
+	dbkey.data = skey;
+	dbkey.size = strlen(skey);
+	memset(&dbval, 0, sizeof(DBT));
+	err = node->db->get(node->db, NULL, &dbkey, &dbval, 0);
+	if (err == 0) out = scm_from_locale_stringn(dbval.data, dbval.size);
+	else if (err == DB_NOTFOUND) out = SCM_BOOL_F;
+	else {
+		out = SCM_BOOL_F;
+		log_msg("kv-get '%s': %d\n", skey, err);
 		}
-	value = (char *)malloc(vsiz + 1);
-	kcdbgetbuf(node->db, skey, strlen(skey), value, vsiz);
-	value[vsiz] = '\0';
 	free(skey);
-	return scm_take_locale_string(value);
+	return out;
 	}
 
 static SCM kv_exists(SCM db, SCM key) {
-	size_t vsiz;
+	int err;
 	char *skey;
+	DBT dbkey, dbval;
 	KVDB_NODE *node;
+	SCM out;
 	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
 	skey = symstr(key);
-	vsiz = kcdbcheck(node->db, skey, strlen(skey));
+	memset(&dbkey, 0, sizeof(DBT));
+	dbkey.data = skey;
+	dbkey.size = strlen(skey);
+	memset(&dbval, 0, sizeof(DBT));
+	err = node->db->get(node->db, NULL, &dbkey, &dbval, 0);
+	if (err == 0) out = SCM_BOOL_T;
+	else if (err == DB_NOTFOUND) out = SCM_BOOL_F;
+	else {
+		out = SCM_BOOL_F;
+		log_msg("kv-exists '%s': %d\n", skey, err);
+		}
 	free(skey);
-	return (vsiz >= 0 ? SCM_BOOL_T : SCM_BOOL_F);
+	return out;
 	}
 
 static SCM kv_count(SCM db) {
 	KVDB_NODE *node;
+	DB_HASH_STAT *stat;
 	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
-	return scm_from_unsigned_integer(kcdbcount(node->db));
+	node->db->stat(node->db, NULL, &stat, 0);
+	return scm_from_unsigned_integer((unsigned int)stat->hash_ndata);
 	}
 
 static SCM kv_keys(SCM db) {
 	KVDB_NODE *node;
-	int64_t n;
-	char **keys;
+	int err;
+	DBC *cursor;
+	DBT dbkey, dbval;
 	SCM list;
-	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
-	n = kcdbcount(node->db);
-	keys = (char **)malloc(sizeof(char *) * n);
-	n = kcdbmatchprefix(node->db, "", keys, n);
-	if (n < 0) {
-		free(keys);
-		return SCM_BOOL_F;
-		}
 	list = SCM_EOL;
-	while(n > 0) {
-		n--;
-		list = scm_cons(scm_from_locale_string(keys[n]), list);
-		kcfree(keys[n]);
+	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
+	node->db->cursor(node->db, NULL, &cursor, 0);
+	memset(&dbkey, 0, sizeof(DBT));
+	memset(&dbval, 0, sizeof(DBT));
+	err = cursor->c_get(cursor, &dbkey, &dbval, DB_FIRST);
+	while (err == 0) {
+		list = scm_cons(scm_from_locale_stringn(dbkey.data, dbkey.size), list);
+		err = cursor->c_get(cursor, &dbkey, &dbval, DB_NEXT);
 		}
-	free(keys);
+	cursor->c_close(cursor);
 	scm_remember_upto_here_2(list, db);
 	return list;
 	}
 
 static SCM kv_del(SCM db, SCM key) {
 	KVDB_NODE *node;
-	int res;
+	int err;
 	char *skey;
+	DBT dbkey;
 	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
 	skey = symstr(key);
-	res = kcdbremove(node->db, skey, strlen(skey));
+	memset(&dbkey, 0, sizeof(DBT));
+	dbkey.data = skey;
+	dbkey.size = strlen(skey);
+	err = node->db->del(node->db, NULL, &dbkey, 0);
 	free(skey);
-	return (res ? SCM_BOOL_T : SCM_BOOL_F);
+	return (err == 0 ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
 void police_cache(void) {
@@ -351,19 +376,26 @@ void police_cache(void) {
 	return;
 	}
 
-static SCM kv_open(SCM entry, SCM mode) {
+static SCM kv_open(SCM entry, SCM readonly) {
 	static char path[PATH_MAX];
 	char *sentry;
+	int err;
 	KVDB_NODE *node;
-	KCDB *db;
+	DB *db;
 	sentry = scm_to_locale_string(entry);
-	snprintf(path, sizeof(path) - 1, "%s/%s.kch", KC_ROOT, sentry);
+	snprintf(path, sizeof(path) - 1, "%s/%s.db", KC_ROOT, sentry);
 	path[sizeof(path) - 1] = '\0';
-	db = kcdbnew();
-	if (!kcdbopen(db, path, scm_to_int(mode))) {
-		log_msg("kv-open '%s': %s\n", sentry,
-					kcecodename(kcdbecode(db)));
-		kcdbdel(db);
+	err = db_create(&db, NULL, 0);
+	if (err != 0) {
+		log_msg("db_create: %d\n", err);
+		free(sentry);
+		return SCM_BOOL_F;
+		}
+	int flags = DB_CREATE;
+	if (readonly == SCM_BOOL_T) flags |= DB_RDONLY;
+	err = db->open(db, NULL, path, NULL, DB_HASH, flags, 0);
+	if (err != 0) {
+		log_msg("db_open '%s': %d\n", path, err);
 		free(sentry);
 		return SCM_BOOL_F;
 		}
@@ -380,8 +412,7 @@ static SCM kv_close(SCM kvdb) {
 	KVDB_NODE *node;
 	node = (KVDB_NODE *)SCM_SMOB_DATA(kvdb);
 	if (node->db != NULL) {
-		kcdbclose(node->db);
-		kcdbdel(node->db);
+		node->db->close(node->db, 0);
 		node->db = NULL;
 		}
 	if (node->path != NULL) {
@@ -401,7 +432,7 @@ static SCM session_key(SCM request) {
 	}
 
 static SCM session_set(SCM request, SCM key, SCM value) {
-	SCM db = kv_open(sessions_db, kv_writer);
+	SCM db = kv_open(sessions_db, SCM_BOOL_F);
 	SCM sesskey = session_key(request);
 	SCM alist = kv_get(db, sesskey);
 	if (alist == SCM_BOOL_F) alist = SCM_EOL;
@@ -417,7 +448,7 @@ static SCM session_set(SCM request, SCM key, SCM value) {
 
 static SCM session_read(SCM request) {
 	SCM val;
-	SCM db = kv_open(sessions_db, kv_reader);
+	SCM db = kv_open(sessions_db, SCM_BOOL_T);
 	SCM sesskey = session_key(request);
 	val = kv_get(db, sesskey);
 	scm_remember_upto_here_1(sesskey);
@@ -460,10 +491,6 @@ void init_cache(void) {
 	scm_c_define_gsubr("fetch-doc", 1, 0, 1, fetch_node);
 	scm_c_define_gsubr("touched-doc?", 1, 0, 0, touched_node);
 	scm_c_define_gsubr("kv-open", 2, 0, 0, kv_open);
-	scm_permanent_object(kv_reader = scm_from_int(KCOREADER));
-	scm_c_define("kv-reader", kv_reader);
-	scm_permanent_object(kv_writer = scm_from_int(KCOWRITER | KCOCREATE));
-	scm_c_define("kv-writer", kv_writer);
 	scm_c_define_gsubr("kv-close", 1, 0, 0, kv_close);
 	scm_c_define_gsubr("kv-set", 3, 0, 0, kv_set);
 	scm_c_define_gsubr("kv-get", 2, 0, 0, kv_get);
