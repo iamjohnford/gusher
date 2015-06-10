@@ -395,10 +395,9 @@ static SCM kv_open(SCM entry, SCM readonly) {
 		free(sentry);
 		return SCM_BOOL_F;
 		}
-	int flags = 0;
+	int flags = DB_THREAD;
 	if (readonly == SCM_BOOL_T) flags |= DB_RDONLY;
 	else flags |= DB_CREATE;
-	flags = DB_CREATE | DB_THREAD;
 	err = db->open(db, NULL, path, NULL, DB_HASH, flags, 0);
 	if (err != 0) {
 		log_msg("db_open '%s': %d\n", path, err);
