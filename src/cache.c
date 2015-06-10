@@ -282,6 +282,7 @@ static SCM kv_get(SCM db, SCM key) {
 	dbkey.data = skey;
 	dbkey.size = strlen(skey);
 	memset(&dbval, 0, sizeof(DBT));
+	dbval.flags = DB_DBT_REALLOC;
 	err = node->db->get(node->db, NULL, &dbkey, &dbval, 0);
 	if (err == 0) out = scm_from_locale_stringn(dbval.data, dbval.size);
 	else if (err == DB_NOTFOUND) out = SCM_BOOL_F;
@@ -289,6 +290,7 @@ static SCM kv_get(SCM db, SCM key) {
 		out = SCM_BOOL_F;
 		log_msg("kv-get '%s': %d\n", skey, err);
 		}
+	free(dbval.data);
 	free(skey);
 	return out;
 	}
@@ -305,6 +307,7 @@ static SCM kv_exists(SCM db, SCM key) {
 	dbkey.data = skey;
 	dbkey.size = strlen(skey);
 	memset(&dbval, 0, sizeof(DBT));
+	dbval.flags = DB_DBT_REALLOC;
 	err = node->db->get(node->db, NULL, &dbkey, &dbval, 0);
 	if (err == 0) out = SCM_BOOL_T;
 	else if (err == DB_NOTFOUND) out = SCM_BOOL_F;
@@ -312,6 +315,7 @@ static SCM kv_exists(SCM db, SCM key) {
 		out = SCM_BOOL_F;
 		log_msg("kv-exists '%s': %d\n", skey, err);
 		}
+	free(dbval.data);
 	free(skey);
 	return out;
 	}
@@ -391,12 +395,15 @@ static SCM kv_open(SCM entry, SCM readonly) {
 		free(sentry);
 		return SCM_BOOL_F;
 		}
-	int flags = DB_CREATE;
+	int flags = 0;
 	if (readonly == SCM_BOOL_T) flags |= DB_RDONLY;
+	else flags |= DB_CREATE;
+	flags = DB_CREATE | DB_THREAD;
 	err = db->open(db, NULL, path, NULL, DB_HASH, flags, 0);
 	if (err != 0) {
 		log_msg("db_open '%s': %d\n", path, err);
 		free(sentry);
+		db->close(db, 0);
 		return SCM_BOOL_F;
 		}
 	free(sentry);
