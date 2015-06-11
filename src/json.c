@@ -100,6 +100,7 @@ static json_t *json_build(SCM obj) {
 	return jobj;
 	}
 
+/*
 static void discard(json_t *obj) {
 	int n;
 	if (obj == NULL) return;
@@ -107,7 +108,7 @@ static void discard(json_t *obj) {
 		while (n--) json_decref(obj);
 	return;
 	}
-
+*/
 SCM json_encode(SCM obj) {
 	char *buf;
 	SCM out;
@@ -116,7 +117,8 @@ SCM json_encode(SCM obj) {
 	scm_remember_upto_here_1(obj);
 	buf = json_dumps(root, JSON_COMPACT);
 //ds(buf);
-	discard(root);
+	//discard(root);
+	json_decref(root);
 	if (buf == NULL) {
 		log_msg("JSON encode failed\n");
 		return SCM_BOOL_F;
@@ -179,7 +181,8 @@ SCM json_decode(SCM string) {
 		obj = SCM_BOOL_F;
 		}
 	else obj = parse(root);
-	discard(root);
+	//discard(root);
+	json_decref(root);
 	free(buf);
 	scm_remember_upto_here_2(string, obj);
 	return obj;
