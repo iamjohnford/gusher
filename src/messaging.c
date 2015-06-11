@@ -27,97 +27,116 @@
 #include "butter.h"
 #include "messaging.h"
 
+#define PUB_PORT 5550
+#define RELAY_PORT 5551
+#define MAX_KEY_LEN 128
+
 typedef struct sock_node {
 	void *msg_sock;
 	int poll;
 	SCM responder;
+	char key[MAX_KEY_LEN];
 	struct sock_node *link;
 	} SOCK_NODE;
 
+static SCM relay_mutex;
+static SCM msg_queue = SCM_EOL;
+static char pub_endpoint[128];
+static char relay_endpoint[128];
 static void *ctx = NULL;
+static void *publisher = NULL;
+static void *relay = NULL;
+static void *rclient = NULL;
 static SCM touch_msg;
 static SOCK_NODE *responders[MAX_POLL_ITEMS];
 static int poll_dirty = 0;
 static int poll_items = 0;
 extern char gusher_root[];
-static char signals_root[PATH_MAX];
-//static zmq_pollitem_t *lsocks = NULL;
-//static int nlsocks = 0;
 static scm_t_bits sock_node_tag;
 static SOCK_NODE *sock_nodes = NULL;
 
-static char *get_sockpath(SCM signal, char *buf, int len) {
-	char *sname;
-	sname = scm_to_locale_string(scm_symbol_to_string(signal));
-	snprintf(buf, len - 1, "ipc://%s/%s.zmq", signals_root, sname);
-	buf[len - 1] = '\0';
-	free(sname);
-	return buf;
-	}
-
-static SCM msg_publisher(SCM endpoint) {
-	SOCK_NODE *node;
-	SCM smob;
-	char sockpath[PATH_MAX];
-	node = (SOCK_NODE *)scm_gc_malloc(sizeof(SOCK_NODE), "sock-node");
-	node->msg_sock = zmq_socket(ctx, ZMQ_PUB);
-	node->poll = 0;
-	node->responder = SCM_BOOL_F;
-	node->link = sock_nodes;
-	sock_nodes = node;
-	get_sockpath(endpoint, sockpath, sizeof(sockpath));
-	scm_remember_upto_here_1(endpoint);
-	zmq_connect(node->msg_sock, sockpath);
-	char *fp = index(sockpath, '/') + 2;
-	chmod(fp, 0660);
-	SCM_NEWSMOB(smob, sock_node_tag, node);
-	return smob;
-	}
-
-static SCM msg_publish(SCM sock, SCM msg) {
-	SOCK_NODE *node;
+static SCM msg_publish(SCM sigkey, SCM msg) {
 	SCM enc;
-	char *buf;
-	node = (SOCK_NODE *)SCM_SMOB_DATA(sock);
+	char *payload, *keyed_msg, *sname;
+	int rc;
 	if (msg == SCM_UNDEFINED) msg = touch_msg;
 	enc = json_encode(msg);
 	if (enc == SCM_BOOL_F) enc = to_s(msg);
-	buf = scm_to_utf8_string(enc);
+	payload = scm_to_utf8_string(enc);
 	scm_remember_upto_here_1(enc);
-	zmq_send(node->msg_sock, buf, strlen(buf), 0);
-	free(buf);
-	scm_remember_upto_here_2(sock, msg);
-	return SCM_BOOL_T;
+	sname = scm_to_utf8_string(scm_symbol_to_string(sigkey));
+	keyed_msg = (char *)malloc(strlen(payload) + MAX_KEY_LEN + 2);
+	sprintf(keyed_msg, "%s:%s", sname, payload);
+	free(payload);
+	rc = zmq_send(rclient, keyed_msg, strlen(keyed_msg), 0);
+	if (rc < 0) {
+		log_msg("queue msg '%s'\n", sname);
+		scm_lock_mutex(relay_mutex);
+		msg_queue = scm_cons(scm_cons(sigkey, msg), msg_queue);
+		scm_gc_protect_object(msg_queue);
+		scm_unlock_mutex(relay_mutex);
+		}
+	else log_msg("publish %d: %s\n", rc, keyed_msg);
+	free(sname);
+	free(keyed_msg);
+	scm_remember_upto_here_2(sigkey, msg);
+	return (rc >= 0 ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
-static SCM msg_subscribe(SCM endpoint, SCM responder) {
+static SCM msg_subscribe(SCM sigkey, SCM responder) {
 	SOCK_NODE *node;
-	char sockpath[PATH_MAX];
+	char key[MAX_KEY_LEN];
+	char *sname;
 	int rc;
 	node = (SOCK_NODE *)scm_gc_malloc(sizeof(SOCK_NODE), "sock-node");
 	node->msg_sock = zmq_socket(ctx, ZMQ_SUB);
-	zmq_setsockopt(node->msg_sock, ZMQ_SUBSCRIBE, NULL, 0);
+	sname = scm_to_locale_string(scm_symbol_to_string(sigkey));
+	snprintf(key, sizeof(key), "%s:", sname);
+	key[sizeof(key) - 1] = '\0';
+	free(sname);
+	scm_remember_upto_here_1(sigkey);
+	zmq_setsockopt(node->msg_sock, ZMQ_SUBSCRIBE, key, strlen(key));
 	node->poll = 1;
 	node->responder = responder;
 	node->link = sock_nodes;
 	sock_nodes = node;
-	get_sockpath(endpoint, sockpath, sizeof(sockpath));
-	scm_remember_upto_here_1(endpoint);
-	rc = zmq_bind(node->msg_sock, sockpath);
+	rc = zmq_connect(node->msg_sock, pub_endpoint);
 	if (rc != 0) {
-		log_msg("zmq_bind to %s failed: %s\n", sockpath, strerror(errno));
+		log_msg("zmq_bind to %s failed: %s\n",
+				pub_endpoint, strerror(errno));
 		}
-	else log_msg("subscribe %s\n", sockpath);
+	else log_msg("subscribe %s, key \"%s\"\n", pub_endpoint, key);
 	poll_dirty = 1;
 	return SCM_UNSPECIFIED;
 	}
 
 void init_messaging() {
 	int major, minor, patch;
-	snprintf(signals_root, sizeof(signals_root) - 1,
-				"%s/signals", gusher_root);
-	signals_root[sizeof(signals_root) - 1] = '\0';
+	scm_permanent_object(relay_mutex = scm_make_mutex());
 	ctx = zmq_ctx_new();
+	sprintf(pub_endpoint, "tcp://127.0.0.1:%d", PUB_PORT);
+	sprintf(relay_endpoint, "tcp://127.0.0.1:%d", RELAY_PORT);
+	publisher = zmq_socket(ctx, ZMQ_PUB);
+	if (zmq_bind(publisher, pub_endpoint) >= 0) {
+		log_msg("publisher bound to %s\n", pub_endpoint);
+		relay = zmq_socket(ctx, ZMQ_REP);
+		if (zmq_bind(relay, relay_endpoint) < 0) {
+			log_msg("relay can't bind to %s: %s\n",
+					relay_endpoint, zmq_strerror(errno));
+			zmq_close(relay);
+			relay = NULL;
+			}
+		else log_msg("relay bound to %s\n", relay_endpoint);
+		}
+	else {
+		log_msg("publisher can't bind to %s: %s\n",
+					pub_endpoint, zmq_strerror(errno));
+		zmq_close(publisher);
+		publisher = NULL;
+		}
+	rclient = zmq_socket(ctx, ZMQ_REQ);
+	zmq_connect(rclient, relay_endpoint);
+	poll_dirty = 1;
 	sock_node_tag = scm_make_smob_type("sock-node", sizeof(SOCK_NODE));
 	zmq_version(&major, &minor, &patch);
 	log_msg("ZeroMQ version %d.%d.%d\n", major, minor, patch);
@@ -129,28 +148,71 @@ void init_messaging() {
 			SCM_EOL
 			);
 	scm_gc_protect_object(touch_msg);
-	scm_c_define_gsubr("msg-publisher", 1, 0, 0, msg_publisher);
 	scm_c_define_gsubr("msg-publish", 1, 1, 0, msg_publish);
 	scm_c_define_gsubr("msg-subscribe", 2, 0, 0, msg_subscribe);
 	return;
 	}
 
+static void relay_to_publisher(zmq_msg_t *msg) {
+	size_t msg_size = zmq_msg_size(msg);
+	void *msg_data = zmq_msg_data(msg);
+	char *s = (char *)malloc(msg_size + 1);
+	memcpy((void *)s, msg_data, msg_size);
+	s[msg_size] = '\0';
+	zmq_send(publisher, msg_data, msg_size, 0);
+	log_msg("relay msg '%s'\n", s);
+	zmq_send(relay, msg_data, msg_size, 0);
+	free(s);
+	return;
+	}
+
+static void recv_relay_reply(zmq_msg_t *msg) {
+	size_t msg_size = zmq_msg_size(msg);
+	void *msg_data = zmq_msg_data(msg);
+	char *s = (char *)malloc(msg_size + 1);
+	memcpy((void *)s, msg_data, msg_size);
+	s[msg_size] = '\0';
+	log_msg("reply from relay '%s'\n", s);
+	free(s);
+	if (!scm_is_null(msg_queue)) {
+		log_msg("republish\n");
+		scm_lock_mutex(relay_mutex);
+		SCM qmsg = SCM_CAR(msg_queue);
+		scm_gc_protect_object(msg_queue = SCM_CDR(msg_queue));
+		msg_publish(SCM_CAR(qmsg), SCM_CDR(qmsg));
+		scm_unlock_mutex(relay_mutex);
+		scm_remember_upto_here_1(qmsg);
+		}
+	return;
+	}
+
+static void recv_subscribed_msg(zmq_msg_t *msg, SOCK_NODE *node) {
+	size_t msg_size = zmq_msg_size(msg);
+	void *msg_data = zmq_msg_data(msg);
+	char *payload = index((const char *)msg_data, ':');
+	if (payload != NULL) {
+		payload += 1;
+		msg_size -= (payload - (char *)msg_data);
+		}
+	else payload = msg_data;
+	scm_call_1(node->responder,
+		json_decode(scm_from_utf8_stringn(payload, msg_size)));
+	return;
+	}
+
 void msg_process(int start, int finish, zmq_pollitem_t polls[]) {
 	int i, rc;
-	SOCK_NODE *node;
+	void *sock;
 	zmq_msg_t msg;
 	for (i = start; i < finish; i++) {
 		if ((polls[i].revents & ZMQ_POLLIN) == 0) continue;
-		node = responders[i - start];
+		sock = polls[i].socket;
 		zmq_msg_init(&msg);
-		rc = zmq_msg_recv(&msg, node->msg_sock, 0);
-		if (rc < 0) log_msg("MSG ERR: %d\n", zmq_errno());
-		else {
-				size_t msg_size = zmq_msg_size(&msg);
-				void *msg_data = zmq_msg_data(&msg);
-				scm_call_1(node->responder,
-					json_decode(scm_from_utf8_stringn(msg_data, msg_size)));
-				}
+		rc = zmq_msg_recv(&msg, sock, 0);
+		if (rc < 0) log_msg("MSG ERR: %s\n", zmq_strerror(errno));
+		else if (sock == relay) relay_to_publisher(&msg);
+		else if (sock == rclient) recv_relay_reply(&msg);
+		else recv_subscribed_msg(&msg, responders[i - start]);
 		zmq_msg_close(&msg);
 		}
 	return;
@@ -161,6 +223,22 @@ int msg_poll_collect(int start, zmq_pollitem_t polls[]) {
 	SOCK_NODE *node;
 	poll_items = 0;
 	node = sock_nodes;
+	if (relay != NULL) {
+		polls[start].socket = relay;
+		polls[start].fd = poll_items;
+		responders[poll_items] = NULL;
+		polls[start].events = ZMQ_POLLIN;
+		start += 1;
+		poll_items += 1;
+		}
+	if (rclient != NULL) {
+		polls[start].socket = rclient;
+		polls[start].fd = poll_items;
+		responders[poll_items] = NULL;
+		polls[start].events = ZMQ_POLLIN;
+		start += 1;
+		poll_items += 1;
+		}
 	while (node != NULL) {
 		if (node->poll) {
 			polls[start].socket = node->msg_sock;
@@ -178,6 +256,18 @@ int msg_poll_collect(int start, zmq_pollitem_t polls[]) {
 
 void shutdown_messaging() {
 	if (ctx != NULL) {
+		if (publisher != NULL) {
+			zmq_close(publisher);
+			publisher = NULL;
+			}
+		if (relay != NULL) {
+			zmq_close(relay);
+			relay = NULL;
+			}
+		if (rclient != NULL) {
+			zmq_close(rclient);
+			rclient = NULL;
+			}
 		SOCK_NODE *next;
 		while (sock_nodes != NULL) {
 			next = sock_nodes->link;
