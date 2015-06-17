@@ -5,7 +5,7 @@ RUN apt-get -y update
 RUN apt-get -y upgrade
 RUN apt-get -y install apt-utils
 RUN apt-get -y install guile-2.0 libjansson4 libpq5 libuuid1 libxml2 libdb5.1 libgcrypt11 libcurl3
-RUN apt-get -y install git vim
+RUN apt-get -y install git vim screen
 RUN mkdir -p /var/lib/gusher/kv
 RUN groupadd gusher
 RUN chgrp -R gusher /var/lib/gusher
