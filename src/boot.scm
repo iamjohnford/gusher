@@ -1,4 +1,6 @@
 
+(add-to-load-path gusher-root)
+
 (define (http-html path responder)
 	(http path
 		(lambda (req)

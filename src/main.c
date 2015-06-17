@@ -962,6 +962,7 @@ static void init_env(void) {
 	scm_c_define_gsubr("query-value-number", 2, 0, 0, query_value_number);
 	scm_c_define_gsubr("query-value-boolean", 2, 0, 0, query_value_boolean);
 	scm_c_define("http-port", scm_from_int(http_port));
+	scm_c_define("gusher-root", scm_from_locale_string(gusher_root));
 	scm_permanent_object(query_sym = makesym("query"));
 	scm_permanent_object(method_sym = makesym("method"));
 	scm_permanent_object(ctype_sym = makesym("content-type"));
