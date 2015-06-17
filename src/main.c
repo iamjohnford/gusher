@@ -37,7 +37,7 @@
 #include <regex.h>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include <zmq.h>
+#include <poll.h>
 
 #include "postgres.h"
 #include "gtime.h"
@@ -47,7 +47,6 @@
 #include "log.h"
 #include "http.h"
 #include "butter.h"
-#include "messaging.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
 #define DEFAULT_PORT 8080
@@ -63,6 +62,7 @@
 #define GETLINE_READ_ERR 3
 #define GETLINE_TOO_LONG 4
 #define GETLINE_DRAINED 5
+#define MAX_POLL_ITEMS 256
 
 struct handler_entry {
 	char *path;
@@ -981,7 +981,6 @@ static void init_env(void) {
 	ver = scm_to_locale_string(scm_version());
 	log_msg("Guile version %s\n", ver);
 	free(ver);
-	init_messaging();
 	init_postgres();
 	init_time();
 	init_cache();
@@ -1021,7 +1020,6 @@ static void shutdown_env(void) {
 	shutdown_cache();
 	shutdown_http();
 	shutdown_time();
-	shutdown_messaging();
 	shutdown_log();
 	}
 
@@ -1160,9 +1158,9 @@ static void police() {
 	}
 
 int main(int argc, char **argv) {
-	zmq_pollitem_t polls[MAX_POLL_ITEMS];
+	struct pollfd polls[MAX_POLL_ITEMS];
 	int opt, http_sock;
-	int fdin, nfds, poll_items;
+	int fdin, nfds;
 	int background;
 	time_t mark;
 	threading = 1;
@@ -1208,12 +1206,10 @@ int main(int argc, char **argv) {
 		optind++;
 		}
 	fdin = fileno(stdin);
-	polls[0].socket = NULL;
 	polls[0].fd = http_sock;
-	polls[0].events = ZMQ_POLLIN;
-	polls[1].socket = NULL;
+	polls[0].events = POLLIN;
 	polls[1].fd = fdin;
-	polls[1].events = ZMQ_POLLIN;
+	polls[1].events = POLLIN;
 	running = 1;
 	if (isatty(fdin))
 		rl_callback_handler_install(prompt, line_handler);
@@ -1230,12 +1226,10 @@ int main(int argc, char **argv) {
 			mark += POLICE_INTVL;
 			police();
 			}
-		poll_items = msg_poll_collect(nfds, polls);
-		if (zmq_poll(polls, poll_items, POLL_TIMEOUT) < 1) continue;
+		if (poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
 		//if (running == 0) break; // why?
-		if (polls[0].revents & ZMQ_POLLIN) process_http(http_sock);
-		if (polls[1].revents & ZMQ_POLLIN) process_line(fdin);
-		msg_process(nfds, poll_items, polls);
+		if (polls[0].revents & POLLIN) process_http(http_sock);
+		if (polls[1].revents & POLLIN) process_line(fdin);
 		}
 	log_msg("bye!\n");
 	close(http_sock);
