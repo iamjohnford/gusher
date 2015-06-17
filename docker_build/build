@@ -1,0 +1,7 @@
+#!/bin/bash
+
+(cd ..; make)
+cp ../src/gusher .
+cp ../src/boot.scm .
+cp ../src/http_msg.scm .
+docker build --rm=true -t wheezy/gusher .
