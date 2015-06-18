@@ -408,7 +408,7 @@ static SCM kv_open(SCM entry, SCM readonly) {
 	else flags |= DB_CREATE;
 	err = db->open(db, NULL, path, NULL, DB_HASH, flags, 0);
 	if (err != 0) {
-		log_msg("db_open '%s': %d\n", path, err);
+		log_msg("db_open '%s': %d,  %s\n", path, err, strerror(errno));
 		db->close(db, 0);
 		return SCM_BOOL_F;
 		}
@@ -460,7 +460,7 @@ static SCM session_set(SCM request, SCM key, SCM value) {
 
 static SCM session_read(SCM request) {
 	SCM val;
-	SCM db = kv_open(sessions_db, SCM_BOOL_T);
+	SCM db = kv_open(sessions_db, SCM_BOOL_F);
 	SCM sesskey = session_key(request);
 	val = kv_get(db, sesskey);
 	scm_remember_upto_here_1(sesskey);
