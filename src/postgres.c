@@ -44,7 +44,16 @@ struct pg_res {
 
 static scm_t_bits pg_conn_tag;
 static scm_t_bits pg_res_tag;
+static int create_kv = 1;
 static SCM dbh_mutex;
+static const char *make_key_value = "\
+create table _kv_ (\
+	namespace varchar,\
+	key varchar,\
+	value text\
+	);";
+static const char *make_kv_index = "\
+create index on _kv_ (namespace, key);";
 
 static SCM pg_open(SCM conninfo) {
 	SCM smob;
@@ -60,6 +69,11 @@ static SCM pg_open(SCM conninfo) {
 				PQerrorMessage(pgc->conn));
 		PQfinish(pgc->conn);
 		pgc->conn = NULL;
+		}
+	else if (create_kv) {
+		create_kv = 0;
+		PQexec(pgc->conn, make_key_value);
+		PQexec(pgc->conn, make_kv_index);
 		}
 	SCM_NEWSMOB(smob, pg_conn_tag, pgc);
 	return smob;

@@ -37,7 +37,6 @@
 #define TYPE_DATUM 0
 #define TYPE_FILE 1
 #define TYPE_CHAIN 2
-#define KC_ROOT "/var/lib/gusher/kv"
 
 typedef struct make_node {
 	SCM callback;
@@ -51,7 +50,7 @@ typedef struct make_node {
 
 typedef struct kvdb_node {
 	DB *db;
-	char *path;
+	char *namespace;
 	} KVDB_NODE;
 
 typedef struct file_node {
@@ -66,7 +65,6 @@ static SCM stamp_sym;
 static FILE_NODE *file_nodes = NULL;
 static scm_t_bits make_node_tag;
 static scm_t_bits kvdb_node_tag;
-static int check_kv_root = 1;
 static SCM sessions_db;
 extern SCM session_sym;
 
@@ -271,27 +269,30 @@ static SCM kv_set(SCM db, SCM key, SCM value) {
 	return (err == 0 ? SCM_BOOL_T : SCM_BOOL_F);
 	}
 
+static const char *kv_get_query = "\
+select value\
+	from _kv_\
+	where (namespace='%s')\
+	and (key='%s')";
+
 static SCM kv_get(SCM db, SCM key) {
 	int err;
 	char *skey;
-	DBT dbkey, dbval;
+	char *query;
 	KVDB_NODE *node;
 	SCM out;
 	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
 	skey = symstr(key);
-	memset(&dbkey, 0, sizeof(DBT));
-	dbkey.data = skey;
-	dbkey.size = strlen(skey);
-	memset(&dbval, 0, sizeof(DBT));
-	dbval.flags = DB_DBT_REALLOC;
-	err = node->db->get(node->db, NULL, &dbkey, &dbval, 0);
+	query = (char *)malloc(strlen(kv_get_query) +
+			strlen(skey) + strlen(node->namespace) + 1);
+	sprintf(query, kv_get_query, node->namespace, skey);
 	if (err == 0) out = scm_from_locale_stringn(dbval.data, dbval.size);
 	else if (err == DB_NOTFOUND) out = SCM_BOOL_F;
 	else {
 		out = SCM_BOOL_F;
 		log_msg("kv-get '%s': %d\n", skey, err);
 		}
-	free(dbval.data);
+	free(query);
 	free(skey);
 	return out;
 	}
@@ -383,53 +384,23 @@ void police_cache(void) {
 
 static SCM kv_open(SCM entry, SCM readonly) {
 	static char path[PATH_MAX];
-	int err;
 	KVDB_NODE *node;
-	DB *db;
-	if (check_kv_root) {
-		check_kv_root = 0;
-		struct stat sts;
-		if (stat(KC_ROOT, &sts) != 0) {
-			log_msg("please provision '%s' for key-value storage\n", KC_ROOT);
-			return SCM_BOOL_F;
-			}
-		}
-	err = db_create(&db, NULL, 0);
-	if (err != 0) {
-		log_msg("db_create: %d\n", err);
-		return SCM_BOOL_F;
-		}
 	char *sentry = scm_to_locale_string(entry);
-	snprintf(path, sizeof(path) - 1, "%s/%s.db", KC_ROOT, sentry);
+	snprintf(path, sizeof(path) - 1, "%s", sentry);
 	path[sizeof(path) - 1] = '\0';
 	free(sentry);
-	int flags = DB_THREAD;
-	if (readonly == SCM_BOOL_T) flags |= DB_RDONLY;
-	else flags |= DB_CREATE;
-	err = db->open(db, NULL, path, NULL, DB_HASH, flags, 0);
-	if (err != 0) {
-		log_msg("db_open '%s': %d,  %s\n", path, err, strerror(errno));
-		db->close(db, 0);
-		return SCM_BOOL_F;
-		}
 	node = (KVDB_NODE *)scm_gc_malloc(sizeof(KVDB_NODE), "kvdb-node");
-	node->db = db;
-	node->path = (char *)malloc(strlen(path) + 1);
-	strcpy(node->path, path);
-	chmod(path, 0664);
+	node->namespace = (char *)malloc(strlen(path) + 1);
+	strcpy(node->namespace, path);
 	SCM_RETURN_NEWSMOB(kvdb_node_tag, node);
 	}
 
 static SCM kv_close(SCM kvdb) {
 	KVDB_NODE *node;
 	node = (KVDB_NODE *)SCM_SMOB_DATA(kvdb);
-	if (node->db != NULL) {
-		node->db->close(node->db, 0);
-		node->db = NULL;
-		}
-	if (node->path != NULL) {
-		free(node->path);
-		node->path = NULL;
+	if (node->namespace != NULL) {
+		free(node->namespace);
+		node->namespace = NULL;
 		}
 	return SCM_BOOL_T;
 	}
