@@ -44,18 +44,9 @@ struct pg_res {
 
 static scm_t_bits pg_conn_tag;
 static scm_t_bits pg_res_tag;
-static int create_kv = 1;
 static SCM dbh_mutex;
-static const char *make_key_value = "\
-create table _kv_ (\
-	namespace varchar,\
-	key varchar,\
-	value text\
-	);";
-static const char *make_kv_index = "\
-create index on _kv_ (namespace, key);";
 
-static SCM pg_open(SCM conninfo) {
+static SCM pg_open_primitive(SCM conninfo) {
 	SCM smob;
 	struct pg_conn *pgc;
 	char *conninfo_s;
@@ -69,11 +60,6 @@ static SCM pg_open(SCM conninfo) {
 				PQerrorMessage(pgc->conn));
 		PQfinish(pgc->conn);
 		pgc->conn = NULL;
-		}
-	else if (create_kv) {
-		create_kv = 0;
-		PQexec(pgc->conn, make_key_value);
-		PQexec(pgc->conn, make_kv_index);
 		}
 	SCM_NEWSMOB(smob, pg_conn_tag, pgc);
 	return smob;
@@ -409,7 +395,7 @@ void init_postgres(void) {
 	scm_set_smob_mark(pg_res_tag, mark_pg_res);
 	dbh_mutex = scm_make_mutex();
 	scm_gc_protect_object(dbh_mutex);
-	scm_c_define_gsubr("pg-open", 1, 0, 0, pg_open);
+	scm_c_define_gsubr("pg-open-primitive", 1, 0, 0, pg_open_primitive);
 	scm_c_define_gsubr("pg-close", 1, 0, 0, pg_close);
 	scm_c_define_gsubr("pg-exec", 2, 0, 0, pg_exec);
 	scm_c_define_gsubr("pg-clear", 1, 0, 0, pg_clear);

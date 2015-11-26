@@ -21,7 +21,6 @@ AC_CHECK_LIB([m], [floor])
 AC_CHECK_LIB([curl], [curl_global_init])
 AC_CHECK_LIB([xml2], [xmlReadMemory])
 AC_CHECK_LIB([readline], [readline])
-AC_CHECK_LIB([db], [db_create])
 AC_CHECK_LIB([gcrypt], [gcry_md_hash_buffer])
 AC_CHECK_LIB([gc], [GC_malloc])
 

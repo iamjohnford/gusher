@@ -14,9 +14,7 @@ Features include:
 - basic [postgresql](http://www.postgresql.org/) interface for SQL
 database access
 
-- [Berkeley DB](http://en.wikipedia.org/wiki/Berkeley_DB), embedded
-key-value database library for caching session state and for general
-no-sql storage
+- Convenient, SQL-based key-value storage
 
 - http client implemented with [libcurl](http://curl.haxx.se/), for
 fetching material (e.g. RSS content) from other web sources

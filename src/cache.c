@@ -27,7 +27,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <db.h>
 
 #include "log.h"
 #include "json.h"
@@ -48,11 +47,6 @@ typedef struct make_node {
 	int dirty;
 	} MAKE_NODE;
 
-typedef struct kvdb_node {
-	DB *db;
-	char *namespace;
-	} KVDB_NODE;
-
 typedef struct file_node {
 	MAKE_NODE *node;
 	time_t mtime;
@@ -64,9 +58,7 @@ static SCM data_sym;
 static SCM stamp_sym;
 static FILE_NODE *file_nodes = NULL;
 static scm_t_bits make_node_tag;
-static scm_t_bits kvdb_node_tag;
 static SCM sessions_db;
-extern SCM session_sym;
 
 static void invalidate(MAKE_NODE *node) {
 	SCM cursor;
@@ -249,123 +241,6 @@ inline char *symstr(SCM key) {
 	return scm_to_locale_string(key);
 	}
 
-static SCM kv_set(SCM db, SCM key, SCM value) {
-	int err;
-	char *skey, *sval;
-	DBT dbkey, dbval;
-	KVDB_NODE *node;
-	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
-	skey = symstr(key);
-	sval = scm_to_locale_string(value);
-	memset(&dbkey, 0, sizeof(DBT));
-	dbkey.data = skey;
-	dbkey.size = strlen(skey);
-	memset(&dbval, 0, sizeof(DBT));
-	dbval.data = sval;
-	dbval.size = strlen(sval);
-	err = node->db->put(node->db, NULL, &dbkey, &dbval, 0);
-	free(skey);
-	free(sval);
-	return (err == 0 ? SCM_BOOL_T : SCM_BOOL_F);
-	}
-
-static const char *kv_get_query = "\
-select value\
-	from _kv_\
-	where (namespace='%s')\
-	and (key='%s')";
-
-static SCM kv_get(SCM db, SCM key) {
-	int err;
-	char *skey;
-	char *query;
-	KVDB_NODE *node;
-	SCM out;
-	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
-	skey = symstr(key);
-	query = (char *)malloc(strlen(kv_get_query) +
-			strlen(skey) + strlen(node->namespace) + 1);
-	sprintf(query, kv_get_query, node->namespace, skey);
-	if (err == 0) out = scm_from_locale_stringn(dbval.data, dbval.size);
-	else if (err == DB_NOTFOUND) out = SCM_BOOL_F;
-	else {
-		out = SCM_BOOL_F;
-		log_msg("kv-get '%s': %d\n", skey, err);
-		}
-	free(query);
-	free(skey);
-	return out;
-	}
-
-static SCM kv_exists(SCM db, SCM key) {
-	int err;
-	char *skey;
-	DBT dbkey, dbval;
-	KVDB_NODE *node;
-	SCM out;
-	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
-	skey = symstr(key);
-	memset(&dbkey, 0, sizeof(DBT));
-	dbkey.data = skey;
-	dbkey.size = strlen(skey);
-	memset(&dbval, 0, sizeof(DBT));
-	dbval.flags = DB_DBT_REALLOC;
-	err = node->db->get(node->db, NULL, &dbkey, &dbval, 0);
-	if (err == 0) out = SCM_BOOL_T;
-	else if (err == DB_NOTFOUND) out = SCM_BOOL_F;
-	else {
-		out = SCM_BOOL_F;
-		log_msg("kv-exists '%s': %d\n", skey, err);
-		}
-	free(dbval.data);
-	free(skey);
-	return out;
-	}
-
-static SCM kv_count(SCM db) {
-	KVDB_NODE *node;
-	DB_HASH_STAT *stat;
-	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
-	node->db->stat(node->db, NULL, &stat, 0);
-	return scm_from_unsigned_integer((unsigned int)stat->hash_ndata);
-	}
-
-static SCM kv_keys(SCM db) {
-	KVDB_NODE *node;
-	int err;
-	DBC *cursor;
-	DBT dbkey, dbval;
-	SCM list;
-	list = SCM_EOL;
-	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
-	node->db->cursor(node->db, NULL, &cursor, 0);
-	memset(&dbkey, 0, sizeof(DBT));
-	memset(&dbval, 0, sizeof(DBT));
-	err = cursor->c_get(cursor, &dbkey, &dbval, DB_FIRST);
-	while (err == 0) {
-		list = scm_cons(scm_from_locale_stringn(dbkey.data, dbkey.size), list);
-		err = cursor->c_get(cursor, &dbkey, &dbval, DB_NEXT);
-		}
-	cursor->c_close(cursor);
-	scm_remember_upto_here_2(list, db);
-	return list;
-	}
-
-static SCM kv_del(SCM db, SCM key) {
-	KVDB_NODE *node;
-	int err;
-	char *skey;
-	DBT dbkey;
-	node = (KVDB_NODE *)SCM_SMOB_DATA(db);
-	skey = symstr(key);
-	memset(&dbkey, 0, sizeof(DBT));
-	dbkey.data = skey;
-	dbkey.size = strlen(skey);
-	err = node->db->del(node->db, NULL, &dbkey, 0);
-	free(skey);
-	return (err == 0 ? SCM_BOOL_T : SCM_BOOL_F);
-	}
-
 void police_cache(void) {
 	FILE_NODE *node;
 	struct stat nstat;
@@ -382,72 +257,6 @@ void police_cache(void) {
 	return;
 	}
 
-static SCM kv_open(SCM entry, SCM readonly) {
-	static char path[PATH_MAX];
-	KVDB_NODE *node;
-	char *sentry = scm_to_locale_string(entry);
-	snprintf(path, sizeof(path) - 1, "%s", sentry);
-	path[sizeof(path) - 1] = '\0';
-	free(sentry);
-	node = (KVDB_NODE *)scm_gc_malloc(sizeof(KVDB_NODE), "kvdb-node");
-	node->namespace = (char *)malloc(strlen(path) + 1);
-	strcpy(node->namespace, path);
-	SCM_RETURN_NEWSMOB(kvdb_node_tag, node);
-	}
-
-static SCM kv_close(SCM kvdb) {
-	KVDB_NODE *node;
-	node = (KVDB_NODE *)SCM_SMOB_DATA(kvdb);
-	if (node->namespace != NULL) {
-		free(node->namespace);
-		node->namespace = NULL;
-		}
-	return SCM_BOOL_T;
-	}
-
-static size_t free_kvdb(SCM smob) {
-	kv_close(smob);
-	return 0;
-	}
-
-static SCM session_key(SCM request) {
-	return scm_assq_ref(request, session_sym);
-	}
-
-static SCM session_set(SCM request, SCM key, SCM value) {
-	SCM db = kv_open(sessions_db, SCM_BOOL_F);
-	SCM sesskey = session_key(request);
-	SCM alist = kv_get(db, sesskey);
-	if (alist == SCM_BOOL_F) alist = SCM_EOL;
-	else alist = json_decode(alist);
-	alist = scm_assq_set_x(alist, stamp_sym, scm_from_ulong(time(NULL)));
-	alist = scm_assq_set_x(alist, key, value);
-	SCM res = kv_set(db, sesskey, json_encode(alist));
-	kv_close(db);
-	scm_remember_upto_here_2(db, sesskey);
-	scm_remember_upto_here_2(alist, res);
-	return res;
-	}
-
-static SCM session_read(SCM request) {
-	SCM val;
-	SCM db = kv_open(sessions_db, SCM_BOOL_F);
-	SCM sesskey = session_key(request);
-	val = kv_get(db, sesskey);
-	scm_remember_upto_here_1(sesskey);
-	kv_close(db);
-	if (val == SCM_BOOL_F) return SCM_BOOL_F;
-	scm_remember_upto_here_2(val, db);
-	return json_decode(val);
-	}
-
-static SCM session_get(SCM request, SCM key) {
-	SCM sess_data = session_read(request);
-	if (sess_data == SCM_BOOL_F) return SCM_BOOL_F;
-	scm_remember_upto_here_1(sess_data);
-	return scm_assq_ref(sess_data, key);
-	}
-
 void shutdown_cache(void) {
 	FILE_NODE *next;
 	while (file_nodes != NULL) {
@@ -462,8 +271,6 @@ void init_cache(void) {
 	make_node_tag = scm_make_smob_type("make-node", sizeof(MAKE_NODE));
 	scm_set_smob_free(make_node_tag, free_node);
 	scm_set_smob_mark(make_node_tag, mark_node);
-	kvdb_node_tag = scm_make_smob_type("kvdb-node", sizeof(KVDB_NODE));
-	scm_set_smob_free(kvdb_node_tag, free_kvdb);
 	sessions_db = scm_from_locale_string("sessions");
 	scm_gc_protect_object(sessions_db);
 	scm_permanent_object(file_sym = scm_from_utf8_symbol("file"));
@@ -473,16 +280,4 @@ void init_cache(void) {
 	scm_c_define_gsubr("touch-doc", 1, 0, 1, touch_node);
 	scm_c_define_gsubr("fetch-doc", 1, 0, 1, fetch_node);
 	scm_c_define_gsubr("touched-doc?", 1, 0, 0, touched_node);
-	scm_c_define_gsubr("kv-open", 2, 0, 0, kv_open);
-	scm_c_define_gsubr("kv-close", 1, 0, 0, kv_close);
-	scm_c_define_gsubr("kv-set", 3, 0, 0, kv_set);
-	scm_c_define_gsubr("kv-get", 2, 0, 0, kv_get);
-	scm_c_define_gsubr("kv-exists", 2, 0, 0, kv_exists);
-	scm_c_define_gsubr("kv-count", 1, 0, 0, kv_count);
-	scm_c_define_gsubr("kv-keys", 1, 0, 0, kv_keys);
-	scm_c_define_gsubr("kv-del", 2, 0, 0, kv_del);
-	scm_c_define_gsubr("session-key", 1, 0, 0, session_key);
-	scm_c_define_gsubr("session-read", 1, 0, 0, session_read);
-	scm_c_define_gsubr("session-get", 2, 0, 0, session_get);
-	scm_c_define_gsubr("session-set", 3, 0, 0, session_set);
 	}
