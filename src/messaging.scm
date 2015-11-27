@@ -1,5 +1,11 @@
-(use-modules (ice-9 format))
-(use-modules (ice-9 regex))
+(define-module (gusher messaging)
+	#:use-module (guile-user)
+	#:use-module (ice-9 format)
+	#:use-module (ice-9 regex)
+	#:use-module (gusher kv)
+	#:export
+		(msg-subscribe msg-unsubscribe msg-unsubscribe-all msg-publish)
+	)
 
 (define msg-protocol "http")
 (define (msg-dbconn) (kv-open "subscriptions" #f))
@@ -51,8 +57,3 @@
 					(cons 'post (list (cons "msg" msg)))))
 			(msg-get-callbacks db msg-key))
 		(kv-close db)))
-
-(msg-unsubscribe-all)
-(msg-subscribe 'foo
-	(lambda (msg)
-		(log-msg (format #f "msg2: ~s" msg))))
