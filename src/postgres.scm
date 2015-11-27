@@ -2,8 +2,7 @@
 (define-module (gusher postgres)
 	#:use-module (guile-user)
 	#:export
-		(pg-query pg-query-exec pg-query-one-row pg-open
-			configure-database))
+		(pg-query pg-exec pg-one-row pg-open configure-database))
 
 (define (pg-query dbh query args)
 	; safely plug SQL query parameters into query template,
@@ -11,10 +10,12 @@
 	(apply format
 		(append (list #f query)
 			(map (lambda (item) (pg-format dbh item)) args))))
-(define (pg-query-exec dbh query . args)
-	(pg-exec dbh (pg-query dbh query args)))
-(define (pg-query-one-row dbh query . args)
-	(pg-one-row dbh (pg-query dbh query args)))
+(define (pg-exec dbh query . args)
+	(pg-exec-primitive dbh
+		(if (null? args) query (pg-query dbh query args))))
+(define (pg-one-row dbh query . args)
+	(pg-one-row-primitive dbh
+		(if (null? args) query (pg-query dbh query args))))
 
 ; database configuration
 (define *database-connection-profile* "")

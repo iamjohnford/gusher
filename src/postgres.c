@@ -397,7 +397,7 @@ void init_postgres(void) {
 	scm_gc_protect_object(dbh_mutex);
 	scm_c_define_gsubr("pg-open-primitive", 1, 0, 0, pg_open_primitive);
 	scm_c_define_gsubr("pg-close", 1, 0, 0, pg_close);
-	scm_c_define_gsubr("pg-exec", 2, 0, 0, pg_exec);
+	scm_c_define_gsubr("pg-exec-primitive", 2, 0, 0, pg_exec);
 	scm_c_define_gsubr("pg-clear", 1, 0, 0, pg_clear);
 	scm_c_define_gsubr("pg-tuples", 1, 0, 0, pg_tuples);
 	scm_c_define_gsubr("pg-cmd-tuples", 1, 0, 0, pg_cmd_tuples);
@@ -405,7 +405,7 @@ void init_postgres(void) {
 	scm_c_define_gsubr("pg-get-row", 1, 0, 0, pg_get_row);
 	scm_c_define_gsubr("pg-each-row", 2, 0, 0, pg_each_row);
 	scm_c_define_gsubr("pg-next-row", 1, 0, 0, pg_next_row);
-	scm_c_define_gsubr("pg-one-row", 2, 0, 0, pg_one_row);
+	scm_c_define_gsubr("pg-one-row-primitive", 2, 0, 0, pg_one_row);
 	scm_c_define_gsubr("pg-map-rows", 1, 0, 1, pg_map_rows);
 	scm_c_define_gsubr("pg-end-stream?", 1, 0, 0, pg_done);
 	scm_c_define_gsubr("pg-format", 2, 0, 0, pg_format_sql);
