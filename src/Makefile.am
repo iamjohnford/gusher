@@ -4,7 +4,7 @@ gusher_SOURCES = main.c postgres.c gtime.c cache.c json.c template.c log.c http.
 lib1dir = /var/lib/gusher
 lib1_SCRIPTS = boot.scm
 lib2dir = /var/lib/gusher/gusher
-lib2_SCRIPTS = kv.scm session.scm postgres.scm messaging.scm
+lib2_SCRIPTS = kv.scm session.scm postgres.scm messaging.scm responders.scm
 
 #install-data-local:
 #	groupadd -f gusher

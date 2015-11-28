@@ -3,9 +3,9 @@
 	#:use-module (ice-9 format)
 	#:use-module (ice-9 regex)
 	#:use-module (gusher kv)
+	#:use-module (gusher responders)
 	#:export
-		(msg-subscribe msg-unsubscribe msg-unsubscribe-all msg-publish)
-	)
+		(msg-subscribe msg-unsubscribe msg-unsubscribe-all msg-publish))
 
 (define msg-protocol "http")
 (define (msg-dbconn) (kv-open "subscriptions" #f))
