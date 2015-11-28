@@ -7,7 +7,7 @@
 (define (session-key http-request)
 	(assq-ref http-request 'session))
 (define (session-read http-request)
-	(let* ([kvh (kv-open "sessions" #f)]
+	(let* ([kvh (kv-open "sessions")]
 			[session
 				(kv-get kvh (session-key http-request))])
 		(kv-close kvh)
@@ -16,7 +16,7 @@
 	(let ([session (session-read http-request)])
 		(and session (assq-ref session key))))
 (define (session-set http-request key value)
-	(let* ([kvh (kv-open "sessions" #f)]
+	(let* ([kvh (kv-open "sessions")]
 			[sess-key (session-key http-request)]
 			[session-raw (kv-get kvh sess-key)]
 			[session (or (json-decode (or session-raw "")) '())])

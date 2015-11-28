@@ -8,7 +8,7 @@
 		(msg-subscribe msg-unsubscribe msg-unsubscribe-all msg-publish))
 
 (define msg-protocol "http")
-(define (msg-dbconn) (kv-open "subscriptions" #f))
+(define (msg-dbconn) (kv-open "subscriptions"))
 (define (msg-callback-url path)
 	(format #f "~a://127.0.0.1:~d~a" msg-protocol http-port path))
 (define (msg-get-callbacks db msg-key)
