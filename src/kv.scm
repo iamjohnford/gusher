@@ -6,7 +6,7 @@
 	#:export
 		(kv-open kv-close kv-get kv-set kv-exists kv-count kv-keys kv-del))
 
-(define (kv-open namespace read-only) (cons (pg-open) namespace))
+(define (kv-open namespace . other) (cons (pg-open) namespace))
 (define (kv-close kv-handle) (pg-close (car kv-handle)))
 (define kv-get-query "\
 select value
