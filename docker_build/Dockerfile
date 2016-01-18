@@ -1,19 +1,29 @@
-FROM scalia/baseimage-wheezy
+FROM debian:8.2
 MAINTAINER Pete Yadlowsky, pmy@linux.com
 RUN echo "build wheezy/gusher instance"
 RUN apt-get -y update
 RUN apt-get -y upgrade
 RUN apt-get -y install apt-utils
-RUN apt-get -y install guile-2.0 libjansson4 libpq5 libuuid1 libxml2 libdb5.1 libgcrypt11 libcurl3
-RUN apt-get -y install git vim screen
+
+# support libraries needed by gusher
+RUN apt-get -y install guile-2.0 guile-2.0-dev libjansson4 libjansson-dev libuuid1 uuid-dev libxml2 libxml2-dev libcurl3 libcurl4-openssl-dev libgcrypt20 libgcrypt20-dev libreadline5 libreadline-dev libgc1c2 libgc-dev
+
+# postgresql
+RUN apt-get -y install libpq5 libpq-dev postgresql-client postgresql-9.4
+
+# dev tools
+RUN apt-get -y install git vim screen gcc make automake
+
+# start-up infrastructure, services
+RUN apt-get -y install supervisor cron screen openssh-server openssh-client
+
 RUN mkdir -p /var/lib/gusher/kv
 RUN groupadd gusher
 RUN chgrp -R gusher /var/lib/gusher
 RUN chmod -R g+w /var/lib/gusher
-RUN useradd -c Developer -d /home/dev -G gusher -m -s /bin/bash dev
-WORKDIR /usr/local/bin
-ADD gusher gusher
-WORKDIR /var/lib/gusher
-ADD boot.scm boot.scm
-ADD http_msg.scm http_msg.scm
-WORKDIR /
+RUN useradd -d /home/gusher -g gusher -m -s /bin/bash gusher
+RUN su -c "git clone https://github.com/pmyadlowsky/gusher.git" - gusher
+COPY build_gusher /home/gusher
+RUN chmod +x /home/gusher/build_gusher
+RUN su -c "/home/gusher/build_gusher" gusher
+RUN (cd ~gusher/gusher; make install)
