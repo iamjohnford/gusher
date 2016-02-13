@@ -10,5 +10,6 @@
 	http simple-response json-response
 	http-port http-get query-value)
 
+(use-modules (gusher misc))
 (use-modules (gusher responders))
 (use-modules (gusher postgres))

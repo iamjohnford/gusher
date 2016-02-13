@@ -1,6 +1,7 @@
 ; postgres helpers
 (define-module (gusher postgres)
 	#:use-module (guile-user)
+	#:use-module (gusher misc)
 	#:export
 		(pg-query pg-exec pg-one-row pg-open configure-database))
 
@@ -21,15 +22,16 @@
 (define *database-connection-profile* "")
 (define* (pg-open #:optional (profile *database-connection-profile*))
 	(pg-open-primitive profile))
-(define assure-key-value-store-query "\
-create table _kv_ (
-	namespace varchar,
-	key varchar,
-	value text
-	);
-create index on _kv_ (namespace, key);")
-(define (configure-database profile)
-	(set! *database-connection-profile* profile)
-	(let ([dbh (pg-open)])
-		(pg-exec dbh assure-key-value-store-query)
-		(pg-close dbh)))
+(define configure-database
+	(let ([query
+				(deflate "create table _kv_ (
+					namespace varchar,
+					key varchar,
+					value text
+					);
+				create index on _kv_ (namespace, key);")])
+		(lambda (profile)
+			(set! *database-connection-profile* profile)
+			(let ([dbh (pg-open)])
+				(pg-exec dbh query)
+				(pg-close dbh)))))
