@@ -1,7 +1,5 @@
 #!/bin/bash
 
-(cd ..; make)
-cp ../src/gusher .
-cp ../src/boot.scm .
-cp ../src/http_msg.scm .
-docker build --rm=true -t wheezy/gusher .
+BASE=${1:-"wheezy"}
+
+docker build --rm=true -f Dockerfile.$BASE -t $BASE/gusher .

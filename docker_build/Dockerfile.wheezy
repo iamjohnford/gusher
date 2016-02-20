@@ -15,7 +15,7 @@ RUN apt-get -y install libpq5 libpq-dev postgresql-client postgresql-9.4
 RUN apt-get -y install git vim screen gcc make automake
 
 # start-up infrastructure, services
-RUN apt-get -y install supervisor cron screen openssh-server openssh-client
+RUN apt-get -y install supervisor cron openssh-server openssh-client
 
 RUN mkdir -p /var/lib/gusher/kv
 RUN groupadd gusher
