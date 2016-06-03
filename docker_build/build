@@ -2,4 +2,7 @@
 
 BASE=${1:-"jessie"}
 
+echo "make sure commits are current and pushed up"
+sleep 3
+
 docker build --rm=true -f Dockerfile.$BASE -t $BASE/gusher .
