@@ -1,5 +1,5 @@
 #!/bin/bash
 
-BASE=${1:-"wheezy"}
+BASE=${1:-"jessie"}
 
 docker build --rm=true -f Dockerfile.$BASE -t $BASE/gusher .
