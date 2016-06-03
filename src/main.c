@@ -919,6 +919,8 @@ static SCM query_value_number(SCM request, SCM key) {
 		else out = scm_from_signed_integer(atoi(buf));
 		free(buf);
 		}
+	scm_remember_upto_here_2(string, out);
+	scm_remember_upto_here_2(request, key);
 	return out;
 	}
 
