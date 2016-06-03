@@ -909,15 +909,17 @@ static SCM query_value(SCM request, SCM key) {
 	}
 
 static SCM query_value_number(SCM request, SCM key) {
-	SCM string;
-	int n;
+	SCM string, out;
 	char *buf;
-	if ((string = query_value(request, key)) == SCM_BOOL_F) n = 0;
+	if ((string = query_value(request, key)) == SCM_BOOL_F)
+		out = scm_from_signed_integer(0);
 	else {
-		n = atoi(buf = scm_to_locale_string(string));
+		buf = scm_to_locale_string(string);
+		if (index(buf, '.') != NULL) out = scm_from_double(atof(buf));
+		else out = scm_from_signed_integer(atoi(buf));
 		free(buf);
 		}
-	return scm_from_signed_integer(n);
+	return out;
 	}
 
 static SCM query_value_boolean(SCM request, SCM key) {
