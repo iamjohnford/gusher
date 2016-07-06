@@ -90,7 +90,6 @@ static SCM pg_exec(SCM conn, SCM query) {
 	scm_lock_mutex(dbh_mutex);
 	pgr->res = PQexec(pgc->conn, query_s);
 	scm_unlock_mutex(dbh_mutex);
-	free(query_s);
 	pgr->cursor = 0;
 	pgr->fields = SCM_EOL;
 	pgr->types = SCM_EOL;
@@ -98,6 +97,12 @@ static SCM pg_exec(SCM conn, SCM query) {
 	pgr->tuples = PQntuples(pgr->res);
 	pgr->cmd_tuples = atoi(PQcmdTuples(pgr->res));
 	pgr->status = PQresultStatus(pgr->res);
+	if ((pgr->status == PGRES_FATAL_ERROR) ||
+			(pgr->status == PGRES_NONFATAL_ERROR)) {
+		log_msg("PQquery: %s\n", query_s);
+		log_msg("PQerr: %s", PQresultErrorMessage(pgr->res));
+		}
+	free(query_s);
 	for (i = pgr->nfields - 1; i >= 0; i--) {
 		pgr->fields = scm_cons(scm_from_utf8_symbol(
 			PQfname(pgr->res, i)), pgr->fields);
