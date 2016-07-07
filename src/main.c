@@ -828,6 +828,20 @@ static void backtrace(SCM stack) {
 	return;
 	}
 
+static void show_location() {
+	static const char *get_location =
+		"(lambda () (current-source-location))";
+	char *buf;
+	SCM format;
+	format = scm_c_public_ref("guile", "format");
+	buf = scm_to_locale_string(scm_call_3(format, SCM_BOOL_F,
+		scm_from_locale_string("~s"),
+			scm_call_0(scm_c_eval_string(get_location))));
+	log_msg("WHERE: %s\n", buf);
+	free(buf);
+	return;
+	}
+
 static SCM catch_req(void *data, SCM key, SCM params) {
 	RFRAME *frame;
 	char *buf;
@@ -841,8 +855,9 @@ static SCM catch_req(void *data, SCM key, SCM params) {
 	buf = scm_to_locale_string(scm_call_3(format, SCM_BOOL_F,
 		scm_from_locale_string("~s"), params));
 	log_msg("DETAIL: %s\n", buf);
-	backtrace(captured_stack);
 	free(buf);
+	show_location();
+	backtrace(captured_stack);
 	send_all(frame->sock, err_msg);
 	close(frame->sock);
 	scm_remember_upto_here_1(format);
@@ -1045,10 +1060,12 @@ static SCM body_proc(void *data) {
 	}
 
 static SCM catch_proc(void *data, SCM key, SCM params) {
-	scm_call_1(scm_c_eval_string("write"), key);
-	scm_call_0(scm_c_eval_string("newline"));
-	scm_call_1(scm_c_eval_string("write"), params);
-	scm_call_0(scm_c_eval_string("newline"));
+	SCM write = scm_c_eval_string("write");
+	SCM newline = scm_c_eval_string("newline");
+	scm_call_1(write, key);
+	scm_call_0(newline);
+	scm_call_1(write, params);
+	scm_call_0(newline);
 	backtrace(captured_stack);
 	return SCM_BOOL_T;
 	}
@@ -1162,6 +1179,32 @@ static void police() {
 	return;
 	}
 
+static SCM load_file_body(void *data) {
+	char *path = (char *)data;
+	scm_c_primitive_load(path);
+	return SCM_BOOL_T;
+	}
+
+static SCM load_file_catch(void *data, SCM key, SCM params) {
+	SCM write = scm_c_eval_string("write");
+	SCM newline = scm_c_eval_string("newline");
+	scm_call_1(write, key);
+	scm_call_0(newline);
+	scm_call_1(write, params);
+	scm_call_0(newline);
+	show_location();
+	backtrace(captured_stack);
+	return SCM_BOOL_T;
+	}
+
+static void load_file(const char *path) {
+	scm_c_catch(SCM_BOOL_T,
+			load_file_body, (void *)path,
+			load_file_catch, "load handler",
+			grab_stack, &captured_stack);
+	return;
+	}
+
 int main(int argc, char **argv) {
 	struct pollfd polls[MAX_POLL_ITEMS];
 	int opt, http_sock;
@@ -1207,7 +1250,7 @@ int main(int argc, char **argv) {
 	init_env();
 	while (optind < argc) {
 		log_msg("load %s\n", argv[optind]);
-		scm_c_primitive_load(argv[optind]);
+		load_file(argv[optind]);
 		optind++;
 		}
 	fdin = fileno(stdin);
