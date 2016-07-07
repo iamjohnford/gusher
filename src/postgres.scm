@@ -24,7 +24,7 @@
 	(pg-open-primitive profile))
 (define configure-database
 	(let ([query
-				(deflate "create table _kv_ (
+				(deflate "create table if not exists _kv_ (
 					namespace varchar,
 					key varchar,
 					value text
