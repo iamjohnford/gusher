@@ -1,0 +1,15 @@
+#! /bin/bash
+
+USER="postgres"
+BASE=`grep $USER /etc/passwd | cut -d : -f 6`
+
+if [ ! -d $BASE ]
+then
+	mkdir $BASE
+	chown $USER $BASE
+fi
+
+if [ ! -d $BASE/data ]
+then
+	su -c "initdb -D data" - $USER
+fi

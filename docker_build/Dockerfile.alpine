@@ -2,7 +2,7 @@ FROM alpine:latest
 RUN echo http://nl.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories
 RUN apk update
 RUN apk upgrade
-RUN apk add openrc build-base gmp-dev util-linux-dev shadow bash linux-pam
+RUN apk add build-base gmp-dev util-linux-dev shadow bash linux-pam
 COPY pamsu /etc/pam.d/su
 RUN apk add guile guile-dev
 RUN apk add jansson jansson-dev libuuid libxml2 libxml2-dev curl-dev
@@ -11,6 +11,14 @@ RUN apk add postgresql-client postgresql-dev postgresql
 RUN apk add git vim screen gcc make automake autoconf
 RUN apk add supervisor openssh openssh-client
 RUN apk add tzdata
+RUN mkdir /etc/supervisor.d
+COPY ssh.sv /etc/supervisor.d/ssh.ini
+COPY cron.sv /etc/supervisor.d/cron.ini
+COPY postgres.sv /etc/supervisor.d/postgres.ini
+COPY init_ssh /tmp/init_ssh
+COPY init_postgres /tmp/init_postgres
+RUN /bin/bash /tmp/init_ssh
+RUN /bin/bash /tmp/init_postgres
 RUN mkdir -p /var/lib/gusher/kv
 RUN groupadd gusher
 RUN chgrp -R gusher /var/lib/gusher
