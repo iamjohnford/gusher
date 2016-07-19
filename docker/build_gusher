@@ -1,6 +1,8 @@
 #! /bin/bash
 
 cd ~/gusher
+git pull origin mini-alpine
+git checkout mini-alpine
 autoreconf -if
 ./configure
 make
