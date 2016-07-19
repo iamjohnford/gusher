@@ -27,9 +27,8 @@
 				(deflate "create table if not exists _kv_ (
 					namespace varchar,
 					key varchar,
-					value text
-					);
-				create index on _kv_ (namespace, key);")])
+					value text);
+				create index _kv_index on _kv_ (namespace, key);")])
 		(lambda (profile)
 			(set! *database-connection-profile* profile)
 			(let ([dbh (pg-open)])
