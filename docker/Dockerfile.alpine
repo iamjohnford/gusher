@@ -7,19 +7,10 @@ COPY pamsu /etc/pam.d/su
 RUN apk add guile guile-dev
 RUN apk add jansson jansson-dev libuuid libxml2 libxml2-dev curl-dev
 RUN apk add libgcrypt libgcrypt-dev readline readline-dev
-RUN apk add postgresql-client postgresql-dev postgresql
-RUN apk add git vim screen gcc make automake autoconf
-RUN apk add supervisor openssh openssh-client
+RUN apk add postgresql-client postgresql-dev
+RUN apk add git gcc make automake autoconf
 RUN apk add tzdata
-RUN mkdir /etc/supervisor.d
-COPY ssh.sv /etc/supervisor.d/ssh.ini
-COPY cron.sv /etc/supervisor.d/cron.ini
-COPY postgres.sv /etc/supervisor.d/postgres.ini
-COPY init_ssh /tmp/init_ssh
-COPY init_postgres /tmp/init_postgres
-RUN /bin/bash /tmp/init_ssh
-RUN /bin/bash /tmp/init_postgres
-RUN mkdir -p /var/lib/gusher/kv
+RUN mkdir -p /var/lib/gusher
 RUN groupadd gusher
 RUN chgrp -R gusher /var/lib/gusher
 RUN chmod -R g+w /var/lib/gusher
@@ -28,4 +19,5 @@ RUN su -c "git clone https://github.com/pmyadlowsky/gusher.git" - gusher
 COPY build_gusher /home/gusher
 RUN chmod +x /home/gusher/build_gusher
 RUN su -c "/home/gusher/build_gusher" gusher
-RUN (cd ~gusher/gusher; make install)
+RUN (cd ~gusher/gusher; make install; make clean)
+RUN apk del git gcc make automake autoconf
