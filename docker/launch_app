@@ -1,0 +1,7 @@
+#! /bin/bash
+
+LOGDIR="/var/log/nowcall"
+
+mkdir -p $LOGDIR
+chown gusher $LOGDIR
+su -c "(cd ~/nowcall; /usr/local/bin/gusher -t $2 ./$1)" - gusher

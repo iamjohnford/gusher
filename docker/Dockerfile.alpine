@@ -17,6 +17,7 @@ RUN chmod -R g+w /var/lib/gusher
 RUN useradd -d /home/gusher -g gusher -m -s /bin/bash gusher
 RUN su -c "git clone https://github.com/pmyadlowsky/gusher.git" - gusher
 COPY build_gusher /home/gusher
+COPY launch_app /usr/local/bin/launch_app
 RUN chmod +x /home/gusher/build_gusher
 RUN su -c "/home/gusher/build_gusher" gusher
 RUN (cd ~gusher/gusher; make install; make clean)
