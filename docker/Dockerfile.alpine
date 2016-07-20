@@ -23,3 +23,4 @@ RUN chmod +x /home/gusher/build_gusher
 RUN su -c "/home/gusher/build_gusher" gusher
 RUN (cd ~gusher/gusher; make install; make clean)
 RUN apk del git gcc make automake autoconf
+EXPOSE 8080
