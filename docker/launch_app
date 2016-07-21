@@ -4,10 +4,15 @@ LOGDIR="/var/log/nowcall"
 STORE="/vol/store"
 APP="$1"
 THREADS="$2"
+SSMTP_CONF="/vol/profile/ssmtp.conf"
 
 mkdir -p $LOGDIR
 chown gusher $LOGDIR
 mkdir -p $STORE
 chown -R gusher $STORE
+if [ -f $SSMTP_CONF ]
+then
+	cp $SSMTP_CONF /etc/ssmtp
+fi
 
 su -c "(cd ~/nowcall; /usr/local/bin/gusher -t $THREADS ./$APP)" - gusher
