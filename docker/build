@@ -1,8 +1,10 @@
 #!/bin/bash
 
-BASE=${1:-"jessie"}
+BASE=${1:-"alpine"}
+IMAGE="pmyadlowsky/gusher:alpine"
 
 echo "make sure commits are current and pushed up"
 sleep 3
 
-docker build --rm=true -f Dockerfile.$BASE -t $BASE/gusher .
+docker build --rm=true -f Dockerfile.$BASE -t $IMAGE .
+docker push $IMAGE
