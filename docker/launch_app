@@ -5,6 +5,7 @@ STORE="/vol/store"
 APP="$1"
 THREADS="$2"
 SSMTP_CONF="/vol/profile/ssmtp.conf"
+CRASH_LOG="$LOGDIR/crash.log"
 
 mkdir -p $LOGDIR
 chown gusher $LOGDIR
@@ -16,3 +17,4 @@ then
 fi
 
 su -c "(cd ~/nowcall; /usr/local/bin/gusher -t $THREADS ./$APP)" - gusher
+echo "`date` $APP down" >> $CRASH_LOG
