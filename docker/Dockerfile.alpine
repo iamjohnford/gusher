@@ -7,7 +7,7 @@ COPY pamsu /etc/pam.d/su
 RUN apk add guile guile-dev
 RUN apk add jansson jansson-dev libuuid libxml2 libxml2-dev curl-dev
 RUN apk add libgcrypt libgcrypt-dev readline readline-dev
-RUN apk add postgresql-client postgresql-dev ssmtp
+RUN apk add postgresql-client postgresql-dev postgresql ssmtp
 RUN apk add git gcc make automake autoconf
 RUN apk add tzdata
 RUN mkdir -p /var/lib/gusher
