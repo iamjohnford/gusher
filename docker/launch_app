@@ -6,7 +6,6 @@ PROFILE="/vol/profile"
 APP="$1"
 THREADS="$2"
 SSMTP_CONF="$PROFILE/ssmtp.conf"
-CRASH_LOG="$LOGDIR/crash.log"
 PULSE="$STORE/$APP.pulse"
 
 mkdir -p $LOGDIR
@@ -19,4 +18,3 @@ then
 fi
 
 su -c "(cd ~/nowcall; /usr/local/bin/gusher -h $PULSE -t $THREADS ./$APP)" - gusher
-echo "`date` $APP down" >> $CRASH_LOG
