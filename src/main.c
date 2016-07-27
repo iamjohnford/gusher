@@ -1210,6 +1210,7 @@ static void heartbeat() {
 	if (pulse_file == NULL) return;
 	int fd = creat(pulse_file, 0644);
 	if (fd < 0) {
+		log_msg("can't write pulse file %s\n", pulse_file);
 		free(pulse_file);
 		pulse_file = NULL;
 		return;
