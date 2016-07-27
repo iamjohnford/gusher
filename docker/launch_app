@@ -2,10 +2,12 @@
 
 LOGDIR="/var/log/nowcall"
 STORE="/vol/store"
+PROFILE="/vol/profile"
 APP="$1"
 THREADS="$2"
-SSMTP_CONF="/vol/profile/ssmtp.conf"
+SSMTP_CONF="$PROFILE/ssmtp.conf"
 CRASH_LOG="$LOGDIR/crash.log"
+PULSE="$STORE/$APP.pulse"
 
 mkdir -p $LOGDIR
 chown gusher $LOGDIR
@@ -16,5 +18,5 @@ then
 	cp $SSMTP_CONF /etc/ssmtp
 fi
 
-su -c "(cd ~/nowcall; /usr/local/bin/gusher -t $THREADS ./$APP)" - gusher
+su -c "(cd ~/nowcall; /usr/local/bin/gusher -h $PULSE -t $THREADS ./$APP)" - gusher
 echo "`date` $APP down" >> $CRASH_LOG

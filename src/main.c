@@ -80,6 +80,7 @@ typedef struct rframe {
 
 static int running;
 static const char *prompt = "gusher> ";
+static char *pulse_file = NULL;
 static struct handler_entry *handlers = NULL;
 char gusher_root[PATH_MAX];
 static regex_t cookie_pat;
@@ -1205,6 +1206,18 @@ static void load_file(const char *path) {
 	return;
 	}
 
+static void heartbeat() {
+	if (pulse_file == NULL) return;
+	int fd = creat(pulse_file, 0644);
+	if (fd < 0) {
+		free(pulse_file);
+		pulse_file = NULL;
+		return;
+		}
+	close(fd);
+	return;
+	}
+
 int main(int argc, char **argv) {
 	struct pollfd polls[MAX_POLL_ITEMS];
 	int opt, http_sock;
@@ -1214,7 +1227,7 @@ int main(int argc, char **argv) {
 	threading = 1;
 	background = 0;
 	gusher_root[0] = '\0';
-	while ((opt = getopt(argc, argv, "sdp:t:")) != -1) {
+	while ((opt = getopt(argc, argv, "sdh:p:t:")) != -1) {
 		switch (opt) {
 			case 'p':
 				http_port = atoi(optarg);
@@ -1225,6 +1238,9 @@ int main(int argc, char **argv) {
 				break;
 			case 'd': // daemon
 				background = 1;
+				break;
+			case 'h': // heartbeat file
+				pulse_file = strdup(optarg);
 				break;
 			case 's': // single-threaded
 				threading = 0;
@@ -1272,6 +1288,7 @@ int main(int argc, char **argv) {
 	while (running) {  
 		if (time(NULL) >= mark) {
 			mark += POLICE_INTVL;
+			heartbeat();
 			police();
 			}
 		if (poll(polls, nfds, POLL_TIMEOUT) < 1) continue;
@@ -1281,6 +1298,7 @@ int main(int argc, char **argv) {
 		}
 	log_msg("bye!\n");
 	close(http_sock);
+	if (pulse_file != NULL) free(pulse_file);
 	shutdown_env();
 	return 0;
 	} 
