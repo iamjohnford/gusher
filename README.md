@@ -14,7 +14,7 @@ Features include:
 - basic [postgresql](http://www.postgresql.org/) interface for SQL
 database access
 
-- Convenient, SQL-based key-value storage
+- Convenient, SQL-hosted key-value storage
 
 - http client implemented with [libcurl](http://curl.haxx.se/), for
 fetching material (e.g. RSS content) from other web sources
@@ -34,6 +34,8 @@ SQL queries, anything that can be represented as a template
 
 - asynchronous intra- and inter-application publish-subscribe messaging
 via [0MQ](http://zeromq.org/)
+
+- simple cron-like job scheduling facility
 
 - command line editing and history (libreadline) for interactive
 Scheme coding
