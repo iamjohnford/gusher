@@ -2,7 +2,7 @@ FROM alpine:latest
 RUN echo http://nl.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories
 RUN apk update
 RUN apk upgrade
-RUN apk add build-base gmp-dev util-linux-dev shadow bash linux-pam
+RUN apk add build-base gmp-dev util-linux-dev bash linux-pam
 COPY pamsu /etc/pam.d/su
 RUN apk add guile guile-dev
 RUN apk add jansson jansson-dev libuuid libxml2 libxml2-dev curl-dev
@@ -11,10 +11,11 @@ RUN apk add postgresql-client postgresql-dev postgresql ssmtp
 RUN apk add git gcc make automake autoconf
 RUN apk add tzdata
 RUN mkdir -p /var/lib/gusher
-RUN groupadd gusher
+RUN addgroup gusher
 RUN chgrp -R gusher /var/lib/gusher
 RUN chmod -R g+w /var/lib/gusher
-RUN useradd -d /home/gusher -g gusher -m -s /bin/bash gusher
+RUN adduser -h /home/gusher -G gusher -s /bin/bash -D gusher
+RUN echo "force clone 2"
 RUN su -c "git clone https://github.com/pmyadlowsky/gusher.git" - gusher
 COPY build_gusher /home/gusher
 COPY launch_app /usr/local/bin/launch_app
