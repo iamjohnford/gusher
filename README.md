@@ -37,5 +37,7 @@ via [0MQ](http://zeromq.org/)
 
 - simple cron-like job scheduling facility
 
+- simple SMTP client for sending email
+
 - command line editing and history (libreadline) for interactive
 Scheme coding
