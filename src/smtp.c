@@ -23,7 +23,7 @@ static size_t reader(void *ptr, size_t size, size_t nmemb,
 	return len;
 	}
 
-static SCM smtp_send_starttls(SCM url, SCM from, SCM recipients,
+static SCM smtp_send(SCM url, SCM from, SCM recipients,
 		SCM username, SCM password, SCM payload) {
 	CURL *curl;
 	CURLcode res;
@@ -77,7 +77,7 @@ static SCM smtp_send_starttls(SCM url, SCM from, SCM recipients,
 	}
 
 void init_smtp(void) {
-	scm_c_define_gsubr("smtp-send-starttls", 6, 0, 0, smtp_send_starttls);
+	scm_c_define_gsubr("smtp-send", 6, 0, 0, smtp_send);
 	}
 
 void shutdown_smtp() {
