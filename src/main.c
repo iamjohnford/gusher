@@ -969,6 +969,12 @@ static void add_thread() {
 	return;
 	}
 
+static SCM exit_gusher() {
+	running = 0;
+	rl_callback_handler_remove();
+	return SCM_UNSPECIFIED;
+	}
+
 static void init_env(void) {
 	char *here, pats[64], *ver;
 	struct stat bstat;
@@ -982,6 +988,7 @@ static void init_env(void) {
 	scm_c_define_gsubr("query-value", 2, 0, 0, query_value);
 	scm_c_define_gsubr("query-value-number", 2, 0, 0, query_value_number);
 	scm_c_define_gsubr("query-value-boolean", 2, 0, 0, query_value_boolean);
+	scm_c_define_gsubr("exit", 0, 0, 0, exit_gusher);
 	scm_c_define("http-port", scm_from_int(http_port));
 	scm_c_define("gusher-root", scm_from_locale_string(gusher_root));
 	scm_permanent_object(query_sym = makesym("query"));
@@ -1049,7 +1056,8 @@ static void shutdown_env(void) {
 
 static void signal_handler(int sig) {
 	log_msg("aborted by signal %s\n", strsignal(sig));
-	running = 0;
+	exit_gusher();
+	return;
 	}
 
 static SCM body_proc(void *data) {
@@ -1076,8 +1084,7 @@ static SCM catch_proc(void *data, SCM key, SCM params) {
 
 static void line_handler(char *line) {
 	if (line == NULL) {
-		running = 0;
-		rl_callback_handler_remove();
+		exit_gusher();
 		return;
 		}
 	add_history(line);
@@ -1098,7 +1105,7 @@ static void process_line(int fd) {
 		}
 	n = read(fd, linebuf, sizeof(linebuf));
 	if (n == 0) {
-		running = 0;
+		exit_gusher();
 		return;
 		}
 	if (n < 0) log_msg("err: %s\n", strerror(errno));
