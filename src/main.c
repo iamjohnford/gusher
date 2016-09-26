@@ -46,6 +46,7 @@
 #include "template.h"
 #include "log.h"
 #include "http.h"
+#include "smtp.h"
 #include "butter.h"
 
 #define makesym(s) (scm_from_locale_symbol(s))
@@ -1009,6 +1010,7 @@ static void init_env(void) {
 	init_template();
 	init_http();
 	init_butter();
+	init_smtp();
 	here = getcwd(NULL, 0);
 	if (chdir(gusher_root) == 0) {
 		if (stat(BOOT_FILE, &bstat) == 0) {
@@ -1040,6 +1042,7 @@ static void shutdown_env(void) {
 	clear_queues();
 	shutdown_cache();
 	shutdown_http();
+	shutdown_smtp();
 	shutdown_time();
 	shutdown_log();
 	}
