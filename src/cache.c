@@ -106,11 +106,11 @@ static char *load_from_file(const char *path) {
 	int fd, n;
 	struct stat bstat;
 	if (stat(path, &bstat) != 0) {
-		perror("load-from-file[1]");
+		log_msg("load-from-file[1]: %s\n", path);
 		return NULL;
 		}
 	if ((fd = open(path, O_RDONLY)) < 0) {
-		perror("load-from-file[2]");
+		log_msg("load-from-file[2]: %s\n", path);
 		return NULL;
 		}
 	buf = (char *)malloc(bstat.st_size + 1);
