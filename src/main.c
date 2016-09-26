@@ -1275,6 +1275,7 @@ int main(int argc, char **argv) {
 	if (http_sock < 0) exit(1);
 	scm_init_guile();
 	init_env();
+	running = 1;
 	while (optind < argc) {
 		log_msg("load %s\n", argv[optind]);
 		load_file(argv[optind]);
@@ -1285,7 +1286,6 @@ int main(int argc, char **argv) {
 	polls[0].events = POLLIN;
 	polls[1].fd = fdin;
 	polls[1].events = POLLIN;
-	running = 1;
 	if (isatty(fdin))
 		rl_callback_handler_install(prompt, line_handler);
 	busy_threads = 0;
@@ -1311,5 +1311,6 @@ int main(int argc, char **argv) {
 	close(http_sock);
 	if (pulse_file != NULL) free(pulse_file);
 	shutdown_env();
+	system("stty sane");
 	return 0;
 	} 
