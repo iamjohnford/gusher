@@ -5,16 +5,11 @@ STORE="/vol/store"
 PROFILE="/vol/profile"
 APP="$1"
 THREADS="$2"
-SSMTP_CONF="$PROFILE/ssmtp.conf"
 PULSE="$STORE/$APP.pulse"
 
 mkdir -p $LOGDIR
 chown gusher $LOGDIR
 mkdir -p $STORE
 chown -R gusher $STORE
-if [ -f $SSMTP_CONF ]
-then
-	cp $SSMTP_CONF /etc/ssmtp
-fi
 
 su -c "(cd ~/nowcall; /usr/local/bin/gusher -h $PULSE -t $THREADS ./$APP)" - gusher
