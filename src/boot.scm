@@ -7,7 +7,7 @@
 	json-decode json-encode
 	time-epoch time-now time-hour time-min time-sec snooze
 	to-i
-	log-msg
+	log-msg-primitive
 	http simple-response json-response
 	http-port http-get query-value)
 

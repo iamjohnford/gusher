@@ -43,7 +43,7 @@ void log_msg(const char *format, ...) {
 	return;
 	}
 
-SCM log_msg_scm(SCM message) {
+static SCM log_msg_primitive(SCM message) {
 	char *msg;
 	msg = scm_to_locale_string(message);
 	log_msg("%s\n", msg);
@@ -70,7 +70,7 @@ static SCM log_to(SCM path) {
 void init_log() {
 	logfile = stderr;
 	scm_c_define_gsubr("log-to", 1, 0, 0, log_to);
-	scm_c_define_gsubr("log-msg", 1, 0, 0, log_msg_scm);
+	scm_c_define_gsubr("log-msg-primitive", 1, 0, 0, log_msg_primitive);
 	scm_permanent_object(lmutex = scm_make_mutex());
 	}
 

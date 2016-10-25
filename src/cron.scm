@@ -21,7 +21,7 @@
 				(check-trigger minute now time-min)
 				(job now)))
 		(define (job-fail key . params)
-			(log-msg (format #f "CRON FAIL: ~s, ~s" key params)))
+			(log-msg "CRON FAIL: ~s, ~s" key params))
 		(define (runjobs now crontab)
 			(for-each
 				(lambda (cron-entry)

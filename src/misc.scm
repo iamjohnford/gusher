@@ -1,7 +1,8 @@
 (define-module (gusher misc)
 	#:use-module (guile-user)
 	#:use-module (ice-9 regex)
-	#:export (deflate)
+	#:use-module (ice-9 format)
+	#:export (deflate log-msg)
 	)
 
 (define deflate
@@ -12,3 +13,8 @@
 		(lambda (src)
 			(regexp-substitute/global #f pat
 				(string-trim-both src) 'pre " " 'post))))
+
+(define (log-msg fmt . args)
+	(if (null? args)
+		(log-msg-primitive fmt)
+		(log-msg-primitive (apply format (cons #f (cons fmt args))))))
