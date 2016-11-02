@@ -1225,6 +1225,9 @@ static void heartbeat() {
 		pulse_file = NULL;
 		return;
 		}
+	char buf[32];
+	sprintf(buf, "%d", getpid());
+	write(fd, buf, strlen(buf));
 	close(fd);
 	return;
 	}
